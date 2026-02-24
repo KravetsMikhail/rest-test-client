@@ -125,6 +125,12 @@ export default function App() {
     password: "",
   };
 
+  const headersRecord = headerRows.reduce<Record<string, string>>((acc, { key, value }) => {
+    const k = key.trim();
+    if (k) acc[k] = value.trim();
+    return acc;
+  }, {});
+
   const loadHistory = useCallback(async () => {
     try {
       const r = await fetch("/api/history");
@@ -183,12 +189,6 @@ export default function App() {
     setHeaderRows((prev) => prev.filter((_, idx) => idx !== i));
   const updateHeaderRow = (i: number, field: "key" | "value", value: string) =>
     setHeaderRows((prev) => prev.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
-
-  const headersRecord = headerRows.reduce<Record<string, string>>((acc, { key, value }) => {
-    const k = key.trim();
-    if (k) acc[k] = value.trim();
-    return acc;
-  }, {});
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
