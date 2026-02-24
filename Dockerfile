@@ -1,28 +1,25 @@
+# Этап 1: сборка фронтенда на Node (Vite требует современный Node)
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install
+
+COPY frontend/ ./
+RUN npm run build
+
+# Этап 2: финальный образ — только Bun и статика
 FROM oven/bun:1.1
 
 WORKDIR /app
 
-# Копируем манифесты для более эффективного кеширования
 COPY package.json tsconfig.json ./
-COPY frontend/package.json frontend/tsconfig.json frontend/vite.config.ts frontend/
-
-# Устанавливаем зависимости (корень + фронтенд)
-RUN bun install
-RUN cd frontend && bun install
-
-# Копируем исходники
 COPY src ./src
-COPY frontend ./frontend
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 COPY README.md LICENSE ./
 
-# Сборка фронтенда (создаётся frontend/dist)
-RUN bun run build
-
-# Порт приложения (можно переопределить переменной окружения PORT)
 EXPOSE 5335
-
 ENV NODE_ENV=production
 
-# Запуск Bun-сервера
 CMD ["bun", "start"]
-
