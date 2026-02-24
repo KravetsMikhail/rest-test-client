@@ -6,6 +6,12 @@
     <title>REST Test Client</title>
   </head>
   <body>
+    <script>
+      (function() {
+        var t = localStorage.getItem("rest-test-client-theme");
+        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

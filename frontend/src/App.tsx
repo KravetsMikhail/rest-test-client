@@ -13,6 +13,14 @@ interface LogEntry {
 }
 
 const MAX_LOGS = 200;
+const THEME_KEY = "rest-test-client-theme";
+
+function getInitialTheme(): "light" | "dark" {
+  if (typeof window === "undefined") return "dark";
+  const stored = localStorage.getItem(THEME_KEY) as "light" | "dark" | null;
+  if (stored === "light" || stored === "dark") return stored;
+  return "dark";
+}
 
 function formatTime(): string {
   const d = new Date();
@@ -77,13 +85,27 @@ export default function App() {
     password: "",
   });
   const [headerRows, setHeaderRows] = useState<{ key: string; value: string }[]>([{ key: "", value: "" }]);
-  const [history, setHistory] = useState<string[]>([]);
+  const [historyEncryption, setHistoryEncryption] = useState(false);
+  const [history, setHistory] = useState<{
+    url: string;
+    method: string;
+    authMode?: AuthMode;
+    keycloak?: KeycloakConfig;
+    headers?: Record<string, string>;
+  }[]>([]);
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<ExecuteResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [responseView, setResponseView] = useState<"json" | "table">("json");
+  const [insecureSSL, setInsecureSSL] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">(getInitialTheme);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const requestStartRef = useRef<number>(0);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
 
   const addLog = useCallback((level: LogLevel, message: string, details?: string) => {
     setLogs((prev) => [
@@ -94,19 +116,67 @@ export default function App() {
 
   const clearLogs = useCallback(() => setLogs([]), []);
 
+  const defaultKeycloak: KeycloakConfig = {
+    serverUrl: "",
+    realm: "",
+    clientId: "",
+    clientSecret: "",
+    username: "",
+    password: "",
+  };
+
   const loadHistory = useCallback(async () => {
     try {
       const r = await fetch("/api/history");
       const data = await r.json();
-      setHistory(data.items ?? []);
+      const list = data.items ?? [];
+      setHistory(
+        Array.isArray(list)
+          ? list.map((e: { url?: string; method?: string; authMode?: AuthMode; keycloak?: KeycloakConfig; headers?: Record<string, string> }) => ({
+              url: e?.url ?? "",
+              method: e?.method ?? "GET",
+              authMode: e?.authMode,
+              keycloak: e?.keycloak,
+              headers: e?.headers,
+            }))
+          : []
+      );
     } catch {
       setHistory([]);
     }
   }, []);
 
+  const saveToHistory = useCallback(async () => {
+    const u = url.trim();
+    if (!u) return;
+    try {
+      await fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: u,
+          method,
+          authMode,
+          keycloak: authMode === "keycloak" ? keycloak : undefined,
+          headers: authMode === "headers" && Object.keys(headersRecord).length > 0 ? headersRecord : undefined,
+        }),
+      });
+      await loadHistory();
+    } catch {
+      // ignore
+    }
+  }, [url, method, authMode, keycloak, headersRecord, loadHistory]);
+
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
+
+  useEffect(() => {
+    fetch("/api/config")
+      .then((r) => r.json())
+      .then((d) => setHistoryEncryption(d.historyEncryption === true))
+      .catch(() => {});
+  }, []);
 
   const addHeaderRow = () => setHeaderRows((prev) => [...prev, { key: "", value: "" }]);
   const removeHeaderRow = (i: number) =>
@@ -140,6 +210,7 @@ export default function App() {
           method,
           headers: Object.keys(headersRecord).length ? headersRecord : undefined,
           body: body.trim() || undefined,
+          insecure: insecureSSL,
           keycloak: authMode === "keycloak" ? keycloak : undefined,
         }),
       });
@@ -173,32 +244,98 @@ export default function App() {
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: 24 }}>
-      <h1 style={{ marginBottom: 8, fontWeight: 600 }}>REST Test Client</h1>
-      <p style={{ color: "var(--muted)", marginBottom: 24 }}>URL, метод, тело запроса, Keycloak или заголовки</p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16, marginBottom: 8 }}>
+        <div>
+          <h1 style={{ marginBottom: 4, fontWeight: 600 }}>REST Test Client</h1>
+          <p style={{ color: "var(--muted)", margin: 0 }}>URL, метод, тело запроса, Keycloak или заголовки</p>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <span style={{ color: "var(--muted)", fontSize: 13 }}>Тема:</span>
+          <button
+            type="button"
+            onClick={() => setTheme("light")}
+            style={{
+              ...btnSecondary,
+              ...(theme === "light" ? { background: "var(--accent-dim)", color: "white", borderColor: "var(--accent-dim)" } : {}),
+            }}
+          >
+            Светлая
+          </button>
+          <button
+            type="button"
+            onClick={() => setTheme("dark")}
+            style={{
+              ...btnSecondary,
+              ...(theme === "dark" ? { background: "var(--accent-dim)", color: "white", borderColor: "var(--accent-dim)" } : {}),
+            }}
+          >
+            Тёмная
+          </button>
+        </div>
+      </div>
+      <div style={{ marginBottom: 24 }} />
+
 
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div>
-          <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>История (последние запросы)</label>
-          <select
-            value=""
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v) setUrl(v);
-            }}
-            style={{
-              width: "100%",
-              padding: "10px 12px",
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: 8,
-              color: "var(--text)",
-            }}
-          >
-            <option value="">— выбрать из истории —</option>
-            {history.map((h) => (
-              <option key={h} value={h}>{h}</option>
-            ))}
-          </select>
+          <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>История запросов</label>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <select
+              value=""
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "") return;
+                const i = parseInt(v, 10);
+                const entry = history[i];
+                if (isNaN(i) || !entry) return;
+                setUrl(entry.url);
+                setMethod(entry.method as "GET" | "POST" | "PUT" | "DELETE");
+                setAuthMode(entry.authMode ?? "none");
+                if (entry.authMode === "keycloak" && entry.keycloak) {
+                  setKeycloak({ ...defaultKeycloak, ...entry.keycloak });
+                } else {
+                  setKeycloak(defaultKeycloak);
+                }
+                if (entry.authMode === "headers" && entry.headers && Object.keys(entry.headers).length > 0) {
+                  setHeaderRows(Object.entries(entry.headers).map(([key, value]) => ({ key, value })));
+                } else {
+                  setHeaderRows([{ key: "", value: "" }]);
+                }
+              }}
+              style={{
+                flex: 1,
+                minWidth: 200,
+                padding: "10px 12px",
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                color: "var(--text)",
+              }}
+            >
+              <option value="">— выбрать из истории —</option>
+              {history.map((h, i) => {
+                const authLabel = h.authMode === "keycloak" ? " (Keycloak)" : h.authMode === "headers" ? " (заголовки)" : "";
+                return (
+                  <option key={i} value={i}>{h.method} {h.url}{authLabel}</option>
+                );
+              })}
+            </select>
+            <button
+              type="button"
+              onClick={saveToHistory}
+              disabled={!url.trim()}
+              style={btnSecondary}
+              title="Сохранить текущие URL и метод в историю"
+            >
+              Сохранить в историю
+            </button>
+          </div>
+          <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--muted)" }}>
+            История пополняется при отправке запроса или по кнопке «Сохранить в историю». При выборе подставляются URL, метод и настройки аутентификации (Keycloak или заголовки).
+            {historyEncryption && (
+              <span style={{ display: "block", marginTop: 4 }}>Пароли и токены в истории шифруются.</span>
+            )}
+          </p>
         </div>
 
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -305,6 +442,17 @@ export default function App() {
           </div>
         )}
 
+        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={insecureSSL}
+            onChange={(e) => setInsecureSSL(e.target.checked)}
+          />
+          <span style={{ color: "var(--muted)" }}>
+            Не проверять сертификат SSL (для самоподписанных / внутренних HTTPS — только для тестов)
+          </span>
+        </label>
+
         <button type="submit" disabled={loading} style={btnPrimary}>
           {loading ? "Отправка…" : "Отправить"}
         </button>
@@ -326,7 +474,7 @@ export default function App() {
         <div
           style={{
             padding: 12,
-            background: "#0c0c0e",
+            background: "var(--log-bg)",
             border: "1px solid var(--border)",
             borderRadius: 8,
             overflow: "auto",
@@ -348,7 +496,7 @@ export default function App() {
                   alignItems: "flex-start",
                   marginBottom: 6,
                   padding: "4px 0",
-                  borderBottom: "1px solid rgba(255,255,255,0.06)",
+                  borderBottom: "1px solid var(--log-border)",
                 }}
               >
                 <span style={{ color: "var(--muted)", flexShrink: 0 }}>{entry.time}</span>

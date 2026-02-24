@@ -1,5 +1,7 @@
 import { config } from "./config";
 import { getHistory, addToHistory } from "./history";
+import type { AuthMode, KeycloakAuth } from "./history";
+import { isEncryptionEnabled } from "./cipher";
 import { getKeycloakToken } from "./keycloak";
 
 const CORS = {
@@ -21,6 +23,7 @@ async function handleExecute(req: Request): Promise<Response> {
     method: string;
     headers?: Record<string, string>;
     body?: string;
+    insecure?: boolean;
     keycloak?: {
       serverUrl: string;
       realm: string;
@@ -36,7 +39,7 @@ async function handleExecute(req: Request): Promise<Response> {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
-  const { url: rawUrl, method, headers = {}, body: reqBody, keycloak } = body;
+  const { url: rawUrl, method, headers = {}, body: reqBody, insecure, keycloak } = body;
   if (!rawUrl || !method) {
     return json({ error: "url and method are required" }, 400);
   }
@@ -73,6 +76,7 @@ async function handleExecute(req: Request): Promise<Response> {
         reqBody && ["POST", "PUT", "PATCH"].includes(method.toUpperCase())
           ? reqBody
           : undefined,
+      ...(insecure ? { tls: { rejectUnauthorized: false } } : {}),
     });
 
     const contentType = res.headers.get("content-type") ?? "";
@@ -83,7 +87,12 @@ async function handleExecute(req: Request): Promise<Response> {
       responseBody = await res.text();
     }
 
-    await addToHistory(url);
+    const authMode: AuthMode = keycloak ? "keycloak" : (Object.keys(headers).length > 0 ? "headers" : "none");
+    await addToHistory(url, method.toUpperCase(), {
+      authMode,
+      keycloak: authMode === "keycloak" ? keycloak : undefined,
+      headers: authMode === "headers" ? headers : undefined,
+    });
 
     return json({
       status: res.status,
@@ -104,6 +113,24 @@ async function handleExecute(req: Request): Promise<Response> {
 
 async function handleHistory(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+  if (req.method === "POST") {
+    let body: { url?: string; method?: string; authMode?: AuthMode; keycloak?: unknown; headers?: Record<string, string> };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "Invalid JSON" }, 400);
+    }
+    const url = (body.url ?? "").trim();
+    if (!url) return json({ error: "url is required" }, 400);
+    const method = (body.method ?? "GET").toUpperCase();
+    const authMode = (body.authMode ?? "none") as AuthMode;
+    const list = await addToHistory(url, method, {
+      authMode,
+      keycloak: authMode === "keycloak" && body.keycloak && typeof body.keycloak === "object" ? (body.keycloak as KeycloakAuth) : undefined,
+      headers: authMode === "headers" && body.headers && typeof body.headers === "object" ? body.headers : undefined,
+    });
+    return json({ items: list });
+  }
   const list = await getHistory();
   return json({ items: list });
 }
@@ -144,7 +171,7 @@ const server = Bun.serve({
       return handleHistory(req);
     }
     if (url.pathname === "/api/config") {
-      return json({ port: config.port, historySize: config.historySize });
+      return json({ port: config.port, historySize: config.historySize, historyEncryption: isEncryptionEnabled() });
     }
 
     const staticRes = await serveStatic(url.pathname);
