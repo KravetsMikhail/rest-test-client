@@ -10,6 +10,7 @@ interface LogEntry {
   level: LogLevel;
   message: string;
   details?: string;
+  kind?: "request_start" | "request_end";
 }
 
 const MAX_LOGS = 200;
@@ -114,6 +115,13 @@ export default function App() {
     ]);
   }, []);
 
+  const addRequestBoundary = useCallback((kind: "request_start" | "request_end") => {
+    setLogs((prev) => [
+      ...prev.slice(-(MAX_LOGS - 1)),
+      { id: crypto.randomUUID(), time: formatTime(), level: "info", message: "", kind },
+    ]);
+  }, []);
+
   const clearLogs = useCallback(() => setLogs([]), []);
 
   const defaultKeycloak: KeycloakConfig = {
@@ -196,6 +204,7 @@ export default function App() {
     setResponse(null);
     setLoading(true);
     const targetUrl = url.trim();
+    addRequestBoundary("request_start");
     addLog("info", `Отправка запроса: ${method} ${targetUrl}`);
     if (authMode === "keycloak") {
       addLog("info", "Аутентификация через Keycloak…");
@@ -235,6 +244,7 @@ export default function App() {
       setError(errMsg);
       addLog("error", `Сбой запроса: ${errMsg}`, `Время до ошибки: ${duration} мс`);
     } finally {
+      addRequestBoundary("request_end");
       setLoading(false);
     }
   };
@@ -487,38 +497,54 @@ export default function App() {
           {logs.length === 0 ? (
             <div style={{ color: "var(--muted)" }}>Здесь будут логи запросов: отправка, ответы, ошибки.</div>
           ) : (
-            [...logs].reverse().map((entry) => (
-              <div
-                key={entry.id}
-                style={{
-                  display: "flex",
-                  gap: 12,
-                  alignItems: "flex-start",
-                  marginBottom: 6,
-                  padding: "4px 0",
-                  borderBottom: "1px solid var(--log-border)",
-                }}
-              >
-                <span style={{ color: "var(--muted)", flexShrink: 0 }}>{entry.time}</span>
-                <span
+            [...logs].reverse().map((entry) =>
+              entry.kind === "request_start" ? (
+                <div key={entry.id} style={{ marginTop: 8, marginBottom: 6 }}>
+                  <div style={{ height: 1, background: "var(--border)", marginBottom: 6 }} />
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.05em" }}>
+                    СТАРТ ЗАПРОСА
+                  </div>
+                </div>
+              ) : entry.kind === "request_end" ? (
+                <div key={entry.id} style={{ marginTop: 6, marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.05em", marginBottom: 6 }}>
+                    ФИНИШ ЗАПРОСА
+                  </div>
+                  <div style={{ height: 1, background: "var(--border)" }} />
+                </div>
+              ) : (
+                <div
+                  key={entry.id}
                   style={{
-                    color:
-                      entry.level === "error"
-                        ? "var(--error)"
-                        : entry.level === "success"
-                          ? "var(--success)"
-                          : entry.level === "warn"
-                            ? "#eab308"
-                            : "var(--text)",
+                    display: "flex",
+                    gap: 12,
+                    alignItems: "flex-start",
+                    marginBottom: 6,
+                    padding: "4px 0",
+                    borderBottom: "1px solid var(--log-border)",
                   }}
                 >
-                  {entry.message}
-                </span>
-                {entry.details && (
-                  <span style={{ color: "var(--muted)", marginLeft: "auto" }}>{entry.details}</span>
-                )}
-              </div>
-            ))
+                  <span style={{ color: "var(--muted)", flexShrink: 0 }}>{entry.time}</span>
+                  <span
+                    style={{
+                      color:
+                        entry.level === "error"
+                          ? "var(--error)"
+                          : entry.level === "success"
+                            ? "var(--success)"
+                            : entry.level === "warn"
+                              ? "#eab308"
+                              : "var(--text)",
+                    }}
+                  >
+                    {entry.message}
+                  </span>
+                  {entry.details && (
+                    <span style={{ color: "var(--muted)", marginLeft: "auto" }}>{entry.details}</span>
+                  )}
+                </div>
+              )
+            )
           )}
         </div>
       </div>
