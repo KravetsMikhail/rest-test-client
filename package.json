@@ -1,0 +1,16 @@
+{
+  "name": "rest-test-client",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/server.ts",
+    "build": "bun run build:frontend",
+    "build:frontend": "cd frontend && bun run build",
+    "start": "bun run src/server.ts",
+    "frontend:dev": "cd frontend && bun run dev"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  }
+}
