@@ -487,7 +487,7 @@ export default function App() {
           {logs.length === 0 ? (
             <div style={{ color: "var(--muted)" }}>Здесь будут логи запросов: отправка, ответы, ошибки.</div>
           ) : (
-            logs.map((entry) => (
+            [...logs].reverse().map((entry) => (
               <div
                 key={entry.id}
                 style={{
