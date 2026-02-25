@@ -24,6 +24,8 @@ async function handleExecute(req: Request): Promise<Response> {
     headers?: Record<string, string>;
     body?: string;
     insecure?: boolean;
+    soapAction?: string;
+    soapBody?: string;
     keycloak?: {
       serverUrl: string;
       realm: string;
@@ -39,7 +41,7 @@ async function handleExecute(req: Request): Promise<Response> {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
-  const { url: rawUrl, method, headers = {}, body: reqBody, insecure, keycloak } = body;
+  const { url: rawUrl, method, headers = {}, body: reqBody, insecure, soapAction, soapBody, keycloak } = body;
   if (!rawUrl || !method) {
     return json({ error: "url and method are required" }, 400);
   }
@@ -92,6 +94,8 @@ async function handleExecute(req: Request): Promise<Response> {
       authMode,
       keycloak: authMode === "keycloak" ? keycloak : undefined,
       headers: authMode === "headers" ? headers : undefined,
+      soapAction: soapAction?.trim() || undefined,
+      soapBody: soapBody?.trim() || undefined,
     });
 
     return json({
@@ -114,7 +118,7 @@ async function handleExecute(req: Request): Promise<Response> {
 async function handleHistory(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   if (req.method === "POST") {
-    let body: { url?: string; method?: string; authMode?: AuthMode; keycloak?: unknown; headers?: Record<string, string> };
+    let body: { url?: string; method?: string; authMode?: AuthMode; keycloak?: unknown; headers?: Record<string, string>; soapAction?: string; soapBody?: string };
     try {
       body = await req.json();
     } catch {
@@ -128,6 +132,8 @@ async function handleHistory(req: Request): Promise<Response> {
       authMode,
       keycloak: authMode === "keycloak" && body.keycloak && typeof body.keycloak === "object" ? (body.keycloak as KeycloakAuth) : undefined,
       headers: authMode === "headers" && body.headers && typeof body.headers === "object" ? body.headers : undefined,
+      soapAction: body.soapAction?.trim() || undefined,
+      soapBody: body.soapBody?.trim() || undefined,
     });
     return json({ items: list });
   }

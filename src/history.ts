@@ -18,6 +18,8 @@ export interface HistoryEntry {
   authMode?: AuthMode;
   keycloak?: KeycloakAuth;
   headers?: Record<string, string>;
+  soapAction?: string;
+  soapBody?: string;
 }
 
 const historyFile = "./data/history.json";
@@ -29,7 +31,17 @@ function normalize(entry: Partial<HistoryEntry>): HistoryEntry {
   const authMode = entry.authMode ?? "none";
   const keycloak = entry.keycloak && authMode === "keycloak" ? entry.keycloak : undefined;
   const headers = entry.headers && authMode === "headers" && Object.keys(entry.headers).length > 0 ? entry.headers : undefined;
-  return { url, method, ...(authMode !== "none" && { authMode }), ...(keycloak && { keycloak }), ...(headers && { headers }) };
+  const soapAction = (entry.soapAction ?? "").trim() || undefined;
+  const soapBody = (entry.soapBody ?? "").trim() || undefined;
+  return {
+    url,
+    method,
+    ...(authMode !== "none" && { authMode }),
+    ...(keycloak && { keycloak }),
+    ...(headers && { headers }),
+    ...(soapAction && { soapAction }),
+    ...(soapBody && { soapBody }),
+  };
 }
 
 function decryptEntry(o: Record<string, unknown>): Partial<HistoryEntry> {
@@ -60,6 +72,8 @@ function decryptEntry(o: Record<string, unknown>): Partial<HistoryEntry> {
     authMode: o.authMode as AuthMode | undefined,
     keycloak: kOut,
     headers,
+    soapAction: o.soapAction != null ? String(o.soapAction) : undefined,
+    soapBody: o.soapBody != null ? String(o.soapBody) : undefined,
   };
 }
 
@@ -88,6 +102,8 @@ function encryptForSave(entry: HistoryEntry): Record<string, unknown> {
     url: entry.url,
     method: entry.method,
     ...(entry.authMode && entry.authMode !== "none" && { authMode: entry.authMode }),
+    ...(entry.soapAction && { soapAction: entry.soapAction }),
+    ...(entry.soapBody && { soapBody: entry.soapBody }),
   };
   if (entry.keycloak) {
     out.keycloak = {
@@ -127,6 +143,8 @@ export interface AddHistoryAuth {
   authMode?: AuthMode;
   keycloak?: KeycloakAuth;
   headers?: Record<string, string>;
+  soapAction?: string;
+  soapBody?: string;
 }
 
 export async function addToHistory(url: string, method = "GET", auth?: AddHistoryAuth): Promise<HistoryEntry[]> {
@@ -137,9 +155,12 @@ export async function addToHistory(url: string, method = "GET", auth?: AddHistor
     authMode: auth?.authMode,
     keycloak: auth?.keycloak,
     headers: auth?.headers,
+    soapAction: auth?.soapAction,
+    soapBody: auth?.soapBody,
   });
   if (!entry.url) return items;
-  const key = (e: HistoryEntry) => `${e.method} ${e.url}`;
+  const key = (e: HistoryEntry) =>
+    e.soapAction != null || e.soapBody != null ? `SOAP ${e.url} ${e.soapAction ?? ""}` : `${e.method} ${e.url}`;
   items = [entry, ...items.filter((e) => key(e) !== key(entry))].slice(
     0,
     config.historySize

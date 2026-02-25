@@ -53,6 +53,17 @@ function parseJsonSafe(text: string): unknown {
   }
 }
 
+function formatXml(text: string): string {
+  try {
+    return text
+      .replace(/>\s+</g, ">\n<")
+      .replace(/\s*<\?[^?]+\?>\s*/g, (m) => m.trim() + "\n")
+      .trim();
+  } catch {
+    return text;
+  }
+}
+
 function jsonToRows(data: unknown): { headers: string[]; rows: Record<string, unknown>[] } {
   const arr = Array.isArray(data) ? data : data && typeof data === "object" && "items" in (data as object) ? (data as { items: unknown[] }).items : Array.isArray(data) ? data : null;
   const list = Array.isArray(arr) ? arr : data && typeof data === "object" ? [data] : [];
@@ -93,6 +104,8 @@ export default function App() {
     authMode?: AuthMode;
     keycloak?: KeycloakConfig;
     headers?: Record<string, string>;
+    soapAction?: string;
+    soapBody?: string;
   }[]>([]);
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<ExecuteResponse | null>(null);
@@ -100,6 +113,13 @@ export default function App() {
   const [responseView, setResponseView] = useState<"json" | "table">("json");
   const [insecureSSL, setInsecureSSL] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">(getInitialTheme);
+  const [activeTab, setActiveTab] = useState<"rest" | "soap">("rest");
+  const [soapUrl, setSoapUrl] = useState("");
+  const [soapAction, setSoapAction] = useState("");
+  const [soapBody, setSoapBody] = useState(`<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body></soap:Body>
+</soap:Envelope>`);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const requestStartRef = useRef<number>(0);
 
@@ -146,12 +166,14 @@ export default function App() {
       const list = data.items ?? [];
       setHistory(
         Array.isArray(list)
-          ? list.map((e: { url?: string; method?: string; authMode?: AuthMode; keycloak?: KeycloakConfig; headers?: Record<string, string> }) => ({
+          ? list.map((e: { url?: string; method?: string; authMode?: AuthMode; keycloak?: KeycloakConfig; headers?: Record<string, string>; soapAction?: string; soapBody?: string }) => ({
               url: e?.url ?? "",
               method: e?.method ?? "GET",
               authMode: e?.authMode,
               keycloak: e?.keycloak,
               headers: e?.headers,
+              soapAction: e?.soapAction,
+              soapBody: e?.soapBody,
             }))
           : []
       );
@@ -180,6 +202,31 @@ export default function App() {
       // ignore
     }
   }, [url, method, authMode, keycloak, headersRecord, loadHistory]);
+
+  const soapHistory = history.filter((e) => e.soapAction != null || e.soapBody != null);
+
+  const saveToHistorySoap = useCallback(async () => {
+    const u = soapUrl.trim();
+    if (!u) return;
+    try {
+      await fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: u,
+          method: "POST",
+          authMode,
+          keycloak: authMode === "keycloak" ? keycloak : undefined,
+          headers: authMode === "headers" && Object.keys(headersRecord).length > 0 ? headersRecord : undefined,
+          soapAction: soapAction.trim() || undefined,
+          soapBody: soapBody.trim() || undefined,
+        }),
+      });
+      await loadHistory();
+    } catch {
+      // ignore
+    }
+  }, [soapUrl, soapAction, soapBody, authMode, keycloak, headersRecord, loadHistory]);
 
   useEffect(() => {
     loadHistory();
@@ -250,6 +297,60 @@ export default function App() {
     }
   };
 
+  const handleSoapSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setResponse(null);
+    setLoading(true);
+    const targetUrl = soapUrl.trim();
+    if (!targetUrl) {
+      setLoading(false);
+      return;
+    }
+    addRequestBoundary("request_start");
+    addLog("info", `SOAP запрос: POST ${targetUrl}`);
+    if (authMode === "keycloak") addLog("info", "Аутентификация через Keycloak…");
+    requestStartRef.current = performance.now();
+    const soapHeaders: Record<string, string> = {
+      "Content-Type": "text/xml; charset=utf-8",
+      ...headersRecord,
+    };
+    if (soapAction.trim()) soapHeaders["SOAPAction"] = soapAction.trim();
+    try {
+      const res = await fetch("/api/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: targetUrl,
+          method: "POST",
+          headers: soapHeaders,
+          body: soapBody.trim() || undefined,
+          insecure: insecureSSL,
+          soapAction: soapAction.trim() || undefined,
+          soapBody: soapBody.trim() || undefined,
+          keycloak: authMode === "keycloak" ? keycloak : undefined,
+        }),
+      });
+      const data = await res.json();
+      const duration = Math.round(performance.now() - requestStartRef.current);
+      if (!res.ok) {
+        setError(data.error || `HTTP ${res.status}`);
+        addLog("error", `Ошибка: ${data.error || res.status}`, `Время: ${duration} мс`);
+        return;
+      }
+      setResponse(data);
+      const logLevel: LogLevel = data.status >= 500 ? "error" : data.status >= 400 ? "warn" : "success";
+      addLog(logLevel, `Ответ ${data.status} ${data.statusText} за ${duration} мс`, `Размер: ${typeof data.body === "string" ? new Blob([data.body]).size : 0} байт`);
+    } catch (err) {
+      const duration = Math.round(performance.now() - requestStartRef.current);
+      addLog("error", `Сбой: ${err instanceof Error ? err.message : "Request failed"}`, `Время: ${duration} мс`);
+      setError(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      addRequestBoundary("request_end");
+      setLoading(false);
+    }
+  };
+
   const parsedBody = response?.contentType?.includes("json") ? parseJsonSafe(response.body) : null;
   const { headers: tableHeaders, rows: tableRows } = parsedBody != null ? jsonToRows(parsedBody) : { headers: [] as string[], rows: [] as Record<string, unknown>[] };
 
@@ -284,9 +385,30 @@ export default function App() {
           </button>
         </div>
       </div>
-      <div style={{ marginBottom: 24 }} />
+      <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
+        <button
+          type="button"
+          onClick={() => setActiveTab("rest")}
+          style={{
+            ...btnSecondary,
+            ...(activeTab === "rest" ? { background: "var(--accent-dim)", color: "white", borderColor: "var(--accent-dim)" } : {}),
+          }}
+        >
+          REST
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("soap")}
+          style={{
+            ...btnSecondary,
+            ...(activeTab === "soap" ? { background: "var(--accent-dim)", color: "white", borderColor: "var(--accent-dim)" } : {}),
+          }}
+        >
+          SOAP
+        </button>
+      </div>
 
-
+      {activeTab === "rest" && (
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div>
           <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>История запросов</label>
@@ -468,6 +590,150 @@ export default function App() {
           {loading ? "Отправка…" : "Отправить"}
         </button>
       </form>
+      )}
+
+      {activeTab === "soap" && (
+        <form onSubmit={handleSoapSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>История SOAP-запросов</label>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <select
+                value=""
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "") return;
+                  const i = parseInt(v, 10);
+                  const entry = soapHistory[i];
+                  if (isNaN(i) || !entry) return;
+                  setSoapUrl(entry.url);
+                  setSoapAction(entry.soapAction ?? "");
+                  if (entry.soapBody) setSoapBody(entry.soapBody);
+                  setAuthMode(entry.authMode ?? "none");
+                  if (entry.authMode === "keycloak" && entry.keycloak) {
+                    setKeycloak({ ...defaultKeycloak, ...entry.keycloak });
+                  } else {
+                    setKeycloak(defaultKeycloak);
+                  }
+                  if (entry.authMode === "headers" && entry.headers && Object.keys(entry.headers).length > 0) {
+                    setHeaderRows(Object.entries(entry.headers).map(([key, value]) => ({ key, value })));
+                  } else {
+                    setHeaderRows([{ key: "", value: "" }]);
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  minWidth: 200,
+                  padding: "10px 12px",
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  color: "var(--text)",
+                }}
+              >
+                <option value="">— выбрать из истории —</option>
+                {soapHistory.map((h, i) => {
+                  const label = h.soapAction ? `POST ${h.url} (${h.soapAction})` : `POST ${h.url}`;
+                  return <option key={i} value={i}>{label}</option>;
+                })}
+              </select>
+              <button
+                type="button"
+                onClick={saveToHistorySoap}
+                disabled={!soapUrl.trim()}
+                style={btnSecondary}
+                title="Сохранить текущие URL, SOAPAction и тело в историю"
+              >
+                Сохранить в историю
+              </button>
+            </div>
+            <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--muted)" }}>
+              История пополняется при отправке запроса или по кнопке «Сохранить в историю». При выборе подставляются URL, SOAPAction, тело и аутентификация.
+            </p>
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>URL SOAP-сервиса</label>
+            <input
+              type="url"
+              placeholder="https://example.com/soap"
+              value={soapUrl}
+              onChange={(e) => setSoapUrl(e.target.value)}
+              required
+              style={{ ...inputStyle, width: "100%" }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>SOAPAction (опционально)</label>
+            <input
+              type="text"
+              placeholder="http://example.com/GetData"
+              value={soapAction}
+              onChange={(e) => setSoapAction(e.target.value)}
+              style={{ ...inputStyle, width: "100%" }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>Тело запроса (XML, SOAP Envelope)</label>
+            <textarea
+              value={soapBody}
+              onChange={(e) => setSoapBody(e.target.value)}
+              rows={14}
+              placeholder={'<?xml version="1.0"?>...'}
+              style={{
+                width: "100%",
+                padding: 12,
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                color: "var(--text)",
+                fontFamily: "var(--font)",
+                fontSize: 13,
+                resize: "vertical",
+              }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>Аутентификация</label>
+            <select
+              value={authMode}
+              onChange={(e) => setAuthMode(e.target.value as AuthMode)}
+              style={{ ...inputStyle, width: "100%" }}
+            >
+              <option value="none">Без аутентификации</option>
+              <option value="keycloak">Keycloak</option>
+              <option value="headers">Ручные заголовки</option>
+            </select>
+          </div>
+          {authMode === "keycloak" && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <input placeholder="URL Keycloak" value={keycloak.serverUrl} onChange={(e) => setKeycloak((k) => ({ ...k, serverUrl: e.target.value }))} style={inputStyle} />
+              <input placeholder="Realm" value={keycloak.realm} onChange={(e) => setKeycloak((k) => ({ ...k, realm: e.target.value }))} style={inputStyle} />
+              <input placeholder="Client ID" value={keycloak.clientId} onChange={(e) => setKeycloak((k) => ({ ...k, clientId: e.target.value }))} style={inputStyle} />
+              <input placeholder="Client Secret" value={keycloak.clientSecret} onChange={(e) => setKeycloak((k) => ({ ...k, clientSecret: e.target.value }))} style={inputStyle} />
+              <input placeholder="Username" value={keycloak.username} onChange={(e) => setKeycloak((k) => ({ ...k, username: e.target.value }))} style={inputStyle} />
+              <input type="password" placeholder="Password" value={keycloak.password} onChange={(e) => setKeycloak((k) => ({ ...k, password: e.target.value }))} style={inputStyle} />
+            </div>
+          )}
+          {authMode === "headers" && (
+            <div>
+              {headerRows.map((row, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <input placeholder="Header" value={row.key} onChange={(e) => updateHeaderRow(i, "key", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                  <input placeholder="Value" value={row.value} onChange={(e) => updateHeaderRow(i, "value", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                  <button type="button" onClick={() => removeHeaderRow(i)} style={btnSecondary}>×</button>
+                </div>
+              ))}
+              <button type="button" onClick={addHeaderRow} style={btnSecondary}>+ Заголовок</button>
+            </div>
+          )}
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            <input type="checkbox" checked={insecureSSL} onChange={(e) => setInsecureSSL(e.target.checked)} />
+            <span style={{ color: "var(--muted)" }}>Не проверять сертификат SSL</span>
+          </label>
+          <button type="submit" disabled={loading} style={btnPrimary}>
+            {loading ? "Отправка…" : "Отправить SOAP"}
+          </button>
+        </form>
+      )}
 
       {error && (
         <div style={{ marginTop: 24, padding: 12, background: "rgba(239,68,68,0.15)", borderRadius: 8, color: "var(--error)" }}>
@@ -623,7 +889,9 @@ export default function App() {
                       const parsed = parseJsonSafe(response.body);
                       return parsed != null ? JSON.stringify(parsed, null, 2) : response.body;
                     })()
-                  : response.body}
+                  : response.contentType?.includes("xml")
+                    ? formatXml(response.body)
+                    : response.body}
               </pre>
             )}
             {responseView === "table" && (
@@ -651,6 +919,8 @@ export default function App() {
                       ))}
                     </tbody>
                   </table>
+                ) : response.contentType?.includes("xml") ? (
+                  <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{formatXml(response.body)}</pre>
                 ) : (
                   <pre style={{ margin: 0 }}>{response.body || "—"}</pre>
                 )}
