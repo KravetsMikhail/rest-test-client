@@ -1,0 +1,154 @@
+{
+  "app": {
+    "title": "REST Test Client",
+    "subtitle": "URL, method, request body, Keycloak or custom headers"
+  },
+  "lang": {
+    "label": "Language",
+    "ru": "Русский",
+    "en": "English"
+  },
+  "theme": {
+    "label": "Theme:",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "tabs": {
+    "rest": "REST",
+    "soap": "SOAP",
+    "graphql": "GraphQL",
+    "files": "Files"
+  },
+  "history": {
+    "label": "Request history",
+    "selectPlaceholder": "— select from history —",
+    "save": "Save to history",
+    "hint": "History is updated when you send a request or click «Save to history». Selecting an entry fills URL, method and auth (Keycloak or headers).",
+    "hintEncrypt": "Passwords and tokens in history are encrypted.",
+    "soapLabel": "SOAP request history",
+    "soapHint": "History is updated when you send a request or click «Save to history». Selecting fills URL, SOAPAction, body and auth.",
+    "graphqlLabel": "GraphQL request history",
+    "graphqlHint": "History is updated on send or «Save to history». Selecting fills URL, query, variables, operation name and auth.",
+    "saveRestTitle": "Save current URL and method to history",
+    "saveSoapTitle": "Save current URL, SOAPAction and body to history",
+    "saveGraphqlTitle": "Save current request to history",
+    "authKeycloak": " (Keycloak)",
+    "authHeaders": " (headers)"
+  },
+  "rest": {
+    "bodyLabel": "Request body (JSON)",
+    "bodyPlaceholder": "{\"key\": \"value\"}",
+    "urlPlaceholder": "https://api.example.com/path?param=value"
+  },
+  "auth": {
+    "label": "Authentication",
+    "none": "None",
+    "keycloak": "Keycloak",
+    "headers": "Custom headers",
+    "keycloakServerUrl": "Keycloak server URL",
+    "realm": "Realm",
+    "clientId": "Client ID",
+    "clientSecret": "Client Secret (optional)",
+    "clientSecretShort": "Client Secret",
+    "username": "Username",
+    "password": "Password"
+  },
+  "headers": {
+    "label": "Headers",
+    "add": "+ Add",
+    "addRow": "+ Header",
+    "headerPlaceholder": "Header",
+    "valuePlaceholder": "Value"
+  },
+  "ssl": {
+    "insecure": "Do not verify SSL certificate (for self-signed / internal HTTPS — testing only)",
+    "insecureShort": "Do not verify SSL certificate"
+  },
+  "submit": {
+    "send": "Send",
+    "sending": "Sending…",
+    "soap": "Send SOAP",
+    "graphql": "Send GraphQL"
+  },
+  "soap": {
+    "urlLabel": "SOAP service URL",
+    "urlPlaceholder": "https://example.com/soap",
+    "actionLabel": "SOAPAction (optional)",
+    "actionPlaceholder": "http://example.com/GetData",
+    "bodyLabel": "Request body (XML, SOAP Envelope)",
+    "bodyPlaceholder": "<?xml version=\"1.0\"?>..."
+  },
+  "graphql": {
+    "urlLabel": "GraphQL endpoint URL",
+    "urlPlaceholder": "https://api.example.com/graphql",
+    "loadSchema": "Load schema",
+    "loadSchemaTitle": "Send introspection query and show API schema (if server supports it)",
+    "schemaHint": "«Load schema» sends an introspection request to the endpoint and shows the schema in the response block. Works if the server has introspection enabled.",
+    "queryLabel": "Query",
+    "queryPlaceholder": "query { ... }",
+    "variablesLabel": "Variables (JSON, optional)",
+    "variablesPlaceholder": "{\"id\": \"1\"}",
+    "operationLabel": "Operation name (optional)",
+    "operationPlaceholder": "GetUser"
+  },
+  "files": {
+    "intro": "File upload and download (S3-compatible API). Uses the same auth and SSL settings as other tabs.",
+    "downloadLabel": "Download",
+    "downloadUrlPlaceholder": "https://bucket.s3.region.amazonaws.com/path/to/object",
+    "downloadBtn": "Download",
+    "downloading": "Downloading…",
+    "uploadLabel": "Upload",
+    "uploadUrlPlaceholder": "Object URL or presigned PUT",
+    "fileNotSelected": "No file selected",
+    "chunkSizeLabel": "Part size (MB, for multipart):",
+    "simpleUpload": "Simple upload (PUT)",
+    "simpleUploadTitle": "Single PUT request with file body",
+    "multipartUpload": "Multipart S3",
+    "multipartUploadTitle": "S3 Multipart: POST ?uploads → PUT parts → POST complete"
+  },
+  "response": {
+    "label": "Response:",
+    "headersTitle": "Response headers",
+    "jsonTab": "JSON",
+    "tableTab": "Table",
+    "nameCol": "Name",
+    "valueCol": "Value"
+  },
+  "logs": {
+    "label": "Logs",
+    "clear": "Clear",
+    "empty": "Request logs will appear here: sends, responses, errors.",
+    "requestStart": "REQUEST START",
+    "requestEnd": "REQUEST END"
+  },
+  "log": {
+    "keycloakAuth": "Authenticating via Keycloak…",
+    "requestSend": "Sending request: {{method}} {{url}}",
+    "response": "Response {{status}} {{statusText}} in {{duration}} ms",
+    "responseShort": "Response {{status}} in {{duration}} ms",
+    "bodySize": "Body size: {{size}} bytes",
+    "sizeBytes": "Size: {{size}} bytes",
+    "error": "Error: {{msg}}",
+    "errorTime": "Time: {{duration}} ms",
+    "fail": "Request failed: {{msg}}",
+    "failTime": "Time before error: {{duration}} ms",
+    "soapRequest": "SOAP request: POST {{url}}",
+    "graphqlRequest": "GraphQL request: POST {{url}}",
+    "schemaRequest": "GraphQL schema request (introspection): POST {{url}}",
+    "schemaError": "Schema error: {{msg}}",
+    "schemaOk": "Schema received: {{status}} in {{duration}} ms",
+    "fileDownload": "Downloading file: GET {{url}}",
+    "fileSaved": "File saved: {{filename}}",
+    "fileUploadPut": "Uploading file (PUT): {{name}}",
+    "uploadIdMissing": "UploadId not found in init response",
+    "uploadIdNotFound": "UploadId not found in XML",
+    "multipartInit": "Multipart: init POST {{url}}",
+    "multipartPart": "Part {{p}}/{{total}}",
+    "multipartComplete": "Multipart: complete (POST complete)",
+    "multipartDone": "Multipart upload done in {{duration}} ms"
+  },
+  "errors": {
+    "uploadIdMissing": "UploadId not found in init response",
+    "requestFailed": "Request failed"
+  }
+}

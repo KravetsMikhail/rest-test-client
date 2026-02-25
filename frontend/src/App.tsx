@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 
 type AuthMode = "none" | "keycloak" | "headers";
 
@@ -108,6 +109,7 @@ const INTROSPECTION_QUERY = `
 `.trim();
 
 export default function App() {
+  const { t, i18n } = useTranslation();
   const [url, setUrl] = useState("");
   const [method, setMethod] = useState<"GET" | "POST" | "PUT" | "DELETE">("GET");
   const [body, setBody] = useState("");
@@ -317,9 +319,9 @@ export default function App() {
     setLoading(true);
     const targetUrl = url.trim();
     addRequestBoundary("request_start");
-    addLog("info", `Отправка запроса: ${method} ${targetUrl}`);
+    addLog("info", t("log.requestSend", { method, url: targetUrl }));
     if (authMode === "keycloak") {
-      addLog("info", "Аутентификация через Keycloak…");
+      addLog("info", t("log.keycloakAuth"));
     }
     requestStartRef.current = performance.now();
     try {
@@ -340,7 +342,7 @@ export default function App() {
       if (!res.ok) {
         const errMsg = data.error || `HTTP ${res.status}`;
         setError(errMsg);
-        addLog("error", `Ошибка: ${errMsg}`, `Время: ${duration} мс`);
+        addLog("error", t("log.error", { msg: errMsg }), t("log.errorTime", { duration }));
         return;
       }
       setResponse(data);
@@ -348,14 +350,14 @@ export default function App() {
       const logLevel: LogLevel = data.status >= 500 ? "error" : data.status >= 400 ? "warn" : "success";
       addLog(
         logLevel,
-        `Ответ ${data.status} ${data.statusText} за ${duration} мс`,
-        `Размер тела: ${size} байт`
+        t("log.response", { status: data.status, statusText: data.statusText, duration }),
+        t("log.bodySize", { size })
       );
     } catch (err) {
       const duration = Math.round(performance.now() - requestStartRef.current);
-      const errMsg = err instanceof Error ? err.message : "Request failed";
+      const errMsg = err instanceof Error ? err.message : t("errors.requestFailed");
       setError(errMsg);
-      addLog("error", `Сбой запроса: ${errMsg}`, `Время до ошибки: ${duration} мс`);
+      addLog("error", t("log.fail", { msg: errMsg }), t("log.failTime", { duration }));
     } finally {
       addRequestBoundary("request_end");
       setLoading(false);
@@ -373,8 +375,8 @@ export default function App() {
       return;
     }
     addRequestBoundary("request_start");
-    addLog("info", `SOAP запрос: POST ${targetUrl}`);
-    if (authMode === "keycloak") addLog("info", "Аутентификация через Keycloak…");
+    addLog("info", t("log.soapRequest", { url: targetUrl }));
+    if (authMode === "keycloak") addLog("info", t("log.keycloakAuth"));
     requestStartRef.current = performance.now();
     const soapHeaders: Record<string, string> = {
       "Content-Type": "text/xml; charset=utf-8",
@@ -400,16 +402,16 @@ export default function App() {
       const duration = Math.round(performance.now() - requestStartRef.current);
       if (!res.ok) {
         setError(data.error || `HTTP ${res.status}`);
-        addLog("error", `Ошибка: ${data.error || res.status}`, `Время: ${duration} мс`);
+        addLog("error", t("log.error", { msg: data.error || String(res.status) }), t("log.errorTime", { duration }));
         return;
       }
       setResponse(data);
       const logLevel: LogLevel = data.status >= 500 ? "error" : data.status >= 400 ? "warn" : "success";
-      addLog(logLevel, `Ответ ${data.status} ${data.statusText} за ${duration} мс`, `Размер: ${typeof data.body === "string" ? new Blob([data.body]).size : 0} байт`);
+      addLog(logLevel, t("log.response", { status: data.status, statusText: data.statusText, duration }), t("log.sizeBytes", { size: typeof data.body === "string" ? new Blob([data.body]).size : 0 }));
     } catch (err) {
       const duration = Math.round(performance.now() - requestStartRef.current);
-      addLog("error", `Сбой: ${err instanceof Error ? err.message : "Request failed"}`, `Время: ${duration} мс`);
-      setError(err instanceof Error ? err.message : "Request failed");
+      addLog("error", t("log.fail", { msg: err instanceof Error ? err.message : t("errors.requestFailed") }), t("log.errorTime", { duration }));
+      setError(err instanceof Error ? err.message : t("errors.requestFailed"));
     } finally {
       addRequestBoundary("request_end");
       setLoading(false);
@@ -427,8 +429,8 @@ export default function App() {
       return;
     }
     addRequestBoundary("request_start");
-    addLog("info", `GraphQL запрос: POST ${targetUrl}`);
-    if (authMode === "keycloak") addLog("info", "Аутентификация через Keycloak…");
+    addLog("info", t("log.graphqlRequest", { url: targetUrl }));
+    if (authMode === "keycloak") addLog("info", t("log.keycloakAuth"));
     requestStartRef.current = performance.now();
     let variables: Record<string, unknown> = {};
     if (graphqlVariables.trim()) {
@@ -464,16 +466,16 @@ export default function App() {
       const duration = Math.round(performance.now() - requestStartRef.current);
       if (!res.ok) {
         setError(data.error || `HTTP ${res.status}`);
-        addLog("error", `Ошибка: ${data.error || res.status}`, `Время: ${duration} мс`);
+        addLog("error", t("log.error", { msg: data.error || String(res.status) }), t("log.errorTime", { duration }));
         return;
       }
       setResponse(data);
       const logLevel: LogLevel = data.status >= 500 ? "error" : data.status >= 400 ? "warn" : "success";
-      addLog(logLevel, `Ответ ${data.status} ${data.statusText} за ${duration} мс`, `Размер: ${typeof data.body === "string" ? new Blob([data.body]).size : 0} байт`);
+      addLog(logLevel, t("log.response", { status: data.status, statusText: data.statusText, duration }), t("log.sizeBytes", { size: typeof data.body === "string" ? new Blob([data.body]).size : 0 }));
     } catch (err) {
       const duration = Math.round(performance.now() - requestStartRef.current);
-      addLog("error", `Сбой: ${err instanceof Error ? err.message : "Request failed"}`, `Время: ${duration} мс`);
-      setError(err instanceof Error ? err.message : "Request failed");
+      addLog("error", t("log.fail", { msg: err instanceof Error ? err.message : t("errors.requestFailed") }), t("log.errorTime", { duration }));
+      setError(err instanceof Error ? err.message : t("errors.requestFailed"));
     } finally {
       addRequestBoundary("request_end");
       setLoading(false);
@@ -487,7 +489,7 @@ export default function App() {
     setResponse(null);
     setLoading(true);
     addRequestBoundary("request_start");
-    addLog("info", "Запрос схемы GraphQL (introspection): POST " + targetUrl);
+    addLog("info", t("log.schemaRequest", { url: targetUrl }));
     requestStartRef.current = performance.now();
     const gqlHeaders: Record<string, string> = { "Content-Type": "application/json", ...headersRecord };
     try {
@@ -507,21 +509,21 @@ export default function App() {
       const duration = Math.round(performance.now() - requestStartRef.current);
       if (!res.ok) {
         setError(data.error || `HTTP ${res.status}`);
-        addLog("error", `Ошибка схемы: ${data.error || res.status}`, `Время: ${duration} мс`);
+        addLog("error", t("log.schemaError", { msg: data.error || String(res.status) }), t("log.errorTime", { duration }));
         return;
       }
       setResponse(data);
       const logLevel: LogLevel = data.status >= 500 ? "error" : data.status >= 400 ? "warn" : "success";
-      addLog(logLevel, `Схема получена: ${data.status} за ${duration} мс`, `Размер: ${typeof data.body === "string" ? new Blob([data.body]).size : 0} байт`);
+      addLog(logLevel, t("log.schemaOk", { status: data.status, duration }), t("log.sizeBytes", { size: typeof data.body === "string" ? new Blob([data.body]).size : 0 }));
     } catch (err) {
       const duration = Math.round(performance.now() - requestStartRef.current);
-      addLog("error", `Сбой: ${err instanceof Error ? err.message : "Request failed"}`, `Время: ${duration} мс`);
-      setError(err instanceof Error ? err.message : "Request failed");
+      addLog("error", t("log.fail", { msg: err instanceof Error ? err.message : t("errors.requestFailed") }), t("log.errorTime", { duration }));
+      setError(err instanceof Error ? err.message : t("errors.requestFailed"));
     } finally {
       addRequestBoundary("request_end");
       setLoading(false);
     }
-  }, [graphqlUrl, headersRecord, insecureSSL, authMode, keycloak]);
+  }, [graphqlUrl, headersRecord, insecureSSL, authMode, keycloak, t]);
 
   const executeFileRequest = useCallback(async (payload: {
     url: string;
@@ -554,11 +556,11 @@ export default function App() {
     setError(null);
     setFilesLoading(true);
     addRequestBoundary("request_start");
-    addLog("info", "Скачивание файла: GET " + targetUrl);
+    addLog("info", t("log.fileDownload", { url: targetUrl }));
     const t0 = performance.now();
     try {
       const data = await executeFileRequest({ url: targetUrl, method: "GET" });
-      addLog(data.status >= 400 ? "warn" : "success", `Ответ ${data.status} за ${Math.round(performance.now() - t0)} мс`, "");
+      addLog(data.status >= 400 ? "warn" : "success", t("log.responseShort", { status: data.status, duration: Math.round(performance.now() - t0) }), "");
       if (data.status < 200 || data.status >= 300) {
         setError(`HTTP ${data.status} ${data.statusText}`);
         return;
@@ -587,15 +589,15 @@ export default function App() {
       a.download = filename || "download";
       a.click();
       URL.revokeObjectURL(a.href);
-      addLog("info", "Файл сохранён: " + (filename || "download"), "");
+      addLog("info", t("log.fileSaved", { filename: filename || "download" }), "");
     } catch (err) {
-      addLog("error", `Сбой: ${err instanceof Error ? err.message : "Request failed"}`, "");
-      setError(err instanceof Error ? err.message : "Request failed");
+      addLog("error", t("log.fail", { msg: err instanceof Error ? err.message : t("errors.requestFailed") }), "");
+      setError(err instanceof Error ? err.message : t("errors.requestFailed"));
     } finally {
       addRequestBoundary("request_end");
       setFilesLoading(false);
     }
-  }, [fileDownloadUrl, executeFileRequest]);
+  }, [fileDownloadUrl, executeFileRequest, t]);
 
   const doFileUploadSimple = useCallback(async () => {
     const targetUrl = fileUploadUrl.trim();
@@ -603,7 +605,7 @@ export default function App() {
     setError(null);
     setFilesLoading(true);
     addRequestBoundary("request_start");
-    addLog("info", "Загрузка файла (PUT): " + selectedFile.name);
+    addLog("info", t("log.fileUploadPut", { name: selectedFile.name }));
     const t0 = performance.now();
     try {
       const buf = await selectedFile.arrayBuffer();
@@ -622,15 +624,15 @@ export default function App() {
         headers,
         bodyBase64,
       });
-      addLog("success", `Загрузка завершена за ${Math.round(performance.now() - t0)} мс`, "");
+      addLog("success", t("log.responseShort", { status: 200, duration: Math.round(performance.now() - t0) }), "");
     } catch (err) {
-      addLog("error", `Сбой: ${err instanceof Error ? err.message : "Request failed"}`, "");
-      setError(err instanceof Error ? err.message : "Request failed");
+      addLog("error", t("log.fail", { msg: err instanceof Error ? err.message : t("errors.requestFailed") }), "");
+      setError(err instanceof Error ? err.message : t("errors.requestFailed"));
     } finally {
       addRequestBoundary("request_end");
       setFilesLoading(false);
     }
-  }, [fileUploadUrl, selectedFile, headersRecord, executeFileRequest]);
+  }, [fileUploadUrl, selectedFile, headersRecord, executeFileRequest, t]);
 
   const doFileUploadMultipart = useCallback(async () => {
     const targetUrl = fileUploadUrl.trim();
@@ -642,7 +644,7 @@ export default function App() {
     const chunkSizeBytes = Math.max(5, Math.min(100, fileChunkSizeMb)) * 1024 * 1024;
     const sep = targetUrl.includes("?") ? "&" : "?";
     try {
-      addLog("info", "Multipart: инициализация POST " + targetUrl + sep + "uploads");
+      addLog("info", t("log.multipartInit", { url: targetUrl + sep + "uploads" }));
       const initRes = await executeFileRequest({
         url: targetUrl + sep + "uploads",
         method: "POST",
@@ -654,8 +656,8 @@ export default function App() {
       const uploadIdEl = doc.querySelector("UploadId");
       const uploadId = uploadIdEl?.textContent?.trim();
       if (!uploadId) {
-        setError("В ответе инициализации не найден UploadId");
-        addLog("error", "Не найден UploadId в XML", initBody.slice(0, 500));
+        setError(t("errors.uploadIdMissing"));
+        addLog("error", t("log.uploadIdNotFound"), initBody.slice(0, 500));
         return;
       }
       addLog("info", "UploadId: " + uploadId, "");
@@ -673,7 +675,7 @@ export default function App() {
           b64 += String.fromCharCode.apply(null, chunk.subarray(i, i + subChunk));
         }
         const partUrl = targetUrl + sep + "uploadId=" + encodeURIComponent(uploadId) + "&partNumber=" + p;
-        addLog("info", `Часть ${p}/${partCount}`, "");
+        addLog("info", t("log.multipartPart", { p, total: partCount }), "");
         const partRes = await executeFileRequest({
           url: partUrl,
           method: "PUT",
@@ -687,22 +689,22 @@ export default function App() {
 <CompleteMultipartUpload xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
 ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ETag}</ETag></Part>`).join("\n")}
 </CompleteMultipartUpload>`;
-      addLog("info", "Multipart: завершение (POST complete)", "");
+      addLog("info", t("log.multipartComplete"), "");
       await executeFileRequest({
         url: targetUrl + sep + "uploadId=" + encodeURIComponent(uploadId),
         method: "POST",
         headers: { ...headersRecord, "Content-Type": "application/xml" },
         body: completeBody,
       });
-      addLog("success", `Multipart загрузка завершена за ${Math.round(performance.now() - t0)} мс`, "");
+      addLog("success", t("log.multipartDone", { duration: Math.round(performance.now() - t0) }), "");
     } catch (err) {
-      addLog("error", `Сбой: ${err instanceof Error ? err.message : "Request failed"}`, "");
-      setError(err instanceof Error ? err.message : "Request failed");
+      addLog("error", t("log.fail", { msg: err instanceof Error ? err.message : t("errors.requestFailed") }), "");
+      setError(err instanceof Error ? err.message : t("errors.requestFailed"));
     } finally {
       addRequestBoundary("request_end");
       setFilesLoading(false);
     }
-  }, [fileUploadUrl, selectedFile, fileChunkSizeMb, headersRecord, executeFileRequest]);
+  }, [fileUploadUrl, selectedFile, fileChunkSizeMb, headersRecord, executeFileRequest, t]);
 
   const parsedBody = response?.contentType?.includes("json") ? parseJsonSafe(response.body) : null;
   const { headers: tableHeaders, rows: tableRows } = parsedBody != null ? jsonToRows(parsedBody) : { headers: [] as string[], rows: [] as Record<string, unknown>[] };
@@ -711,11 +713,11 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16, marginBottom: 8 }}>
         <div>
-          <h1 style={{ marginBottom: 4, fontWeight: 600 }}>REST Test Client</h1>
-          <p style={{ color: "var(--muted)", margin: 0 }}>URL, метод, тело запроса, Keycloak или заголовки</p>
+          <h1 style={{ marginBottom: 4, fontWeight: 600 }}>{t("app.title")}</h1>
+          <p style={{ color: "var(--muted)", margin: 0 }}>{t("app.subtitle")}</p>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ color: "var(--muted)", fontSize: 13 }}>Тема:</span>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ color: "var(--muted)", fontSize: 13 }}>{t("theme.label")}</span>
           <button
             type="button"
             onClick={() => setTheme("light")}
@@ -724,7 +726,7 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
               ...(theme === "light" ? { background: "var(--accent-dim)", color: "white", borderColor: "var(--accent-dim)" } : {}),
             }}
           >
-            Светлая
+            {t("theme.light")}
           </button>
           <button
             type="button"
@@ -734,8 +736,24 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
               ...(theme === "dark" ? { background: "var(--accent-dim)", color: "white", borderColor: "var(--accent-dim)" } : {}),
             }}
           >
-            Тёмная
+            {t("theme.dark")}
           </button>
+          <select
+            value={i18n.language}
+            onChange={(e) => i18n.changeLanguage(e.target.value)}
+            style={{
+              padding: "8px 12px",
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              color: "var(--text)",
+              fontSize: 13,
+            }}
+            aria-label={t("lang.label")}
+          >
+            <option value="ru">{t("lang.ru")}</option>
+            <option value="en">{t("lang.en")}</option>
+          </select>
         </div>
       </div>
       <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
@@ -747,7 +765,7 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
             ...(activeTab === "rest" ? { background: "var(--accent-dim)", color: "white", borderColor: "var(--accent-dim)" } : {}),
           }}
         >
-          REST
+          {t("tabs.rest")}
         </button>
         <button
           type="button"
@@ -757,7 +775,7 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
             ...(activeTab === "soap" ? { background: "var(--accent-dim)", color: "white", borderColor: "var(--accent-dim)" } : {}),
           }}
         >
-          SOAP
+          {t("tabs.soap")}
         </button>
         <button
           type="button"
@@ -767,7 +785,7 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
             ...(activeTab === "graphql" ? { background: "var(--accent-dim)", color: "white", borderColor: "var(--accent-dim)" } : {}),
           }}
         >
-          GraphQL
+          {t("tabs.graphql")}
         </button>
         <button
           type="button"
@@ -777,14 +795,14 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
             ...(activeTab === "files" ? { background: "var(--accent-dim)", color: "white", borderColor: "var(--accent-dim)" } : {}),
           }}
         >
-          Файлы
+          {t("tabs.files")}
         </button>
       </div>
 
       {activeTab === "rest" && (
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div>
-          <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>История запросов</label>
+          <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>{t("history.label")}</label>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <select
               value=""
@@ -818,9 +836,9 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
                 color: "var(--text)",
               }}
             >
-              <option value="">— выбрать из истории —</option>
+              <option value="">{t("history.selectPlaceholder")}</option>
               {restHistory.map((h, i) => {
-                const authLabel = h.authMode === "keycloak" ? " (Keycloak)" : h.authMode === "headers" ? " (заголовки)" : "";
+                const authLabel = h.authMode === "keycloak" ? t("history.authKeycloak") : h.authMode === "headers" ? t("history.authHeaders") : "";
                 return (
                   <option key={i} value={i}>{h.method} {h.url}{authLabel}</option>
                 );
@@ -831,15 +849,15 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
               onClick={saveToHistory}
               disabled={!url.trim()}
               style={btnSecondary}
-              title="Сохранить текущие URL и метод в историю"
+              title={t("history.saveRestTitle")}
             >
-              Сохранить в историю
+              {t("history.save")}
             </button>
           </div>
           <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--muted)" }}>
-            История пополняется при отправке запроса или по кнопке «Сохранить в историю». При выборе подставляются URL, метод и настройки аутентификации (Keycloak или заголовки).
+            {t("history.hint")}
             {historyEncryption && (
-              <span style={{ display: "block", marginTop: 4 }}>Пароли и токены в истории шифруются.</span>
+              <span style={{ display: "block", marginTop: 4 }}>{t("history.hintEncrypt")}</span>
             )}
           </p>
         </div>
@@ -864,7 +882,7 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
           </select>
           <input
             type="url"
-            placeholder="https://api.example.com/path?param=value"
+            placeholder={t("rest.urlPlaceholder")}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             required
@@ -882,12 +900,12 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
 
         {["POST", "PUT"].includes(method) && (
           <div>
-            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>Тело запроса (JSON)</label>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>{t("rest.bodyLabel")}</label>
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={6}
-              placeholder='{"key": "value"}'
+              placeholder={t("rest.bodyPlaceholder")}
               style={{
                 width: "100%",
                 padding: 12,
@@ -902,7 +920,7 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
         )}
 
         <div>
-          <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>Аутентификация</label>
+          <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>{t("auth.label")}</label>
           <select
             value={authMode}
             onChange={(e) => setAuthMode(e.target.value as AuthMode)}
@@ -915,33 +933,33 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
               color: "var(--text)",
             }}
           >
-            <option value="none">Без аутентификации</option>
-            <option value="keycloak">Keycloak</option>
-            <option value="headers">Ручные заголовки</option>
+            <option value="none">{t("auth.none")}</option>
+            <option value="keycloak">{t("auth.keycloak")}</option>
+            <option value="headers">{t("auth.headers")}</option>
           </select>
         </div>
 
         {authMode === "keycloak" && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <input placeholder="URL сервера Keycloak" value={keycloak.serverUrl} onChange={(e) => setKeycloak((k) => ({ ...k, serverUrl: e.target.value }))} style={inputStyle} />
-            <input placeholder="Realm" value={keycloak.realm} onChange={(e) => setKeycloak((k) => ({ ...k, realm: e.target.value }))} style={inputStyle} />
-            <input placeholder="Client ID" value={keycloak.clientId} onChange={(e) => setKeycloak((k) => ({ ...k, clientId: e.target.value }))} style={inputStyle} />
-            <input placeholder="Client Secret (опционально)" value={keycloak.clientSecret} onChange={(e) => setKeycloak((k) => ({ ...k, clientSecret: e.target.value }))} style={inputStyle} />
-            <input placeholder="Username" value={keycloak.username} onChange={(e) => setKeycloak((k) => ({ ...k, username: e.target.value }))} style={inputStyle} />
-            <input type="password" placeholder="Password" value={keycloak.password} onChange={(e) => setKeycloak((k) => ({ ...k, password: e.target.value }))} style={inputStyle} />
+            <input placeholder={t("auth.keycloakServerUrl")} value={keycloak.serverUrl} onChange={(e) => setKeycloak((k) => ({ ...k, serverUrl: e.target.value }))} style={inputStyle} />
+            <input placeholder={t("auth.realm")} value={keycloak.realm} onChange={(e) => setKeycloak((k) => ({ ...k, realm: e.target.value }))} style={inputStyle} />
+            <input placeholder={t("auth.clientId")} value={keycloak.clientId} onChange={(e) => setKeycloak((k) => ({ ...k, clientId: e.target.value }))} style={inputStyle} />
+            <input placeholder={t("auth.clientSecret")} value={keycloak.clientSecret} onChange={(e) => setKeycloak((k) => ({ ...k, clientSecret: e.target.value }))} style={inputStyle} />
+            <input placeholder={t("auth.username")} value={keycloak.username} onChange={(e) => setKeycloak((k) => ({ ...k, username: e.target.value }))} style={inputStyle} />
+            <input type="password" placeholder={t("auth.password")} value={keycloak.password} onChange={(e) => setKeycloak((k) => ({ ...k, password: e.target.value }))} style={inputStyle} />
           </div>
         )}
 
         {authMode === "headers" && (
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <span style={{ color: "var(--muted)" }}>Заголовки</span>
-              <button type="button" onClick={addHeaderRow} style={btnSecondary}>+ Добавить</button>
+              <span style={{ color: "var(--muted)" }}>{t("headers.label")}</span>
+              <button type="button" onClick={addHeaderRow} style={btnSecondary}>{t("headers.add")}</button>
             </div>
             {headerRows.map((row, i) => (
               <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                <input placeholder="Header" value={row.key} onChange={(e) => updateHeaderRow(i, "key", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
-                <input placeholder="Value" value={row.value} onChange={(e) => updateHeaderRow(i, "value", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                <input placeholder={t("headers.headerPlaceholder")} value={row.key} onChange={(e) => updateHeaderRow(i, "key", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                <input placeholder={t("headers.valuePlaceholder")} value={row.value} onChange={(e) => updateHeaderRow(i, "value", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
                 <button type="button" onClick={() => removeHeaderRow(i)} style={btnSecondary}>×</button>
               </div>
             ))}
@@ -955,12 +973,12 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
             onChange={(e) => setInsecureSSL(e.target.checked)}
           />
           <span style={{ color: "var(--muted)" }}>
-            Не проверять сертификат SSL (для самоподписанных / внутренних HTTPS — только для тестов)
+            {t("ssl.insecure")}
           </span>
         </label>
 
         <button type="submit" disabled={loading} style={btnPrimary}>
-          {loading ? "Отправка…" : "Отправить"}
+          {loading ? t("submit.sending") : t("submit.send")}
         </button>
       </form>
       )}
@@ -968,7 +986,7 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
       {activeTab === "soap" && (
         <form onSubmit={handleSoapSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
-            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>История SOAP-запросов</label>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>{t("history.soapLabel")}</label>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <select
                 value=""
@@ -1003,7 +1021,7 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
                   color: "var(--text)",
                 }}
               >
-                <option value="">— выбрать из истории —</option>
+                <option value="">{t("history.selectPlaceholder")}</option>
                 {soapHistory.map((h, i) => {
                   const label = h.soapAction ? `POST ${h.url} (${h.soapAction})` : `POST ${h.url}`;
                   return <option key={i} value={i}>{label}</option>;
@@ -1014,20 +1032,20 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
                 onClick={saveToHistorySoap}
                 disabled={!soapUrl.trim()}
                 style={btnSecondary}
-                title="Сохранить текущие URL, SOAPAction и тело в историю"
+                title={t("history.saveSoapTitle")}
               >
-                Сохранить в историю
+                {t("history.save")}
               </button>
             </div>
             <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--muted)" }}>
-              История пополняется при отправке запроса или по кнопке «Сохранить в историю». При выборе подставляются URL, SOAPAction, тело и аутентификация.
+              {t("history.soapHint")}
             </p>
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>URL SOAP-сервиса</label>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>{t("soap.urlLabel")}</label>
             <input
               type="url"
-              placeholder="https://example.com/soap"
+              placeholder={t("soap.urlPlaceholder")}
               value={soapUrl}
               onChange={(e) => setSoapUrl(e.target.value)}
               required
@@ -1035,22 +1053,22 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
             />
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>SOAPAction (опционально)</label>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>{t("soap.actionLabel")}</label>
             <input
               type="text"
-              placeholder="http://example.com/GetData"
+              placeholder={t("soap.actionPlaceholder")}
               value={soapAction}
               onChange={(e) => setSoapAction(e.target.value)}
               style={{ ...inputStyle, width: "100%" }}
             />
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>Тело запроса (XML, SOAP Envelope)</label>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>{t("soap.bodyLabel")}</label>
             <textarea
               value={soapBody}
               onChange={(e) => setSoapBody(e.target.value)}
               rows={14}
-              placeholder={'<?xml version="1.0"?>...'}
+              placeholder={t("soap.bodyPlaceholder")}
               style={{
                 width: "100%",
                 padding: 12,
@@ -1078,32 +1096,32 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
           </div>
           {authMode === "keycloak" && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <input placeholder="URL Keycloak" value={keycloak.serverUrl} onChange={(e) => setKeycloak((k) => ({ ...k, serverUrl: e.target.value }))} style={inputStyle} />
-              <input placeholder="Realm" value={keycloak.realm} onChange={(e) => setKeycloak((k) => ({ ...k, realm: e.target.value }))} style={inputStyle} />
-              <input placeholder="Client ID" value={keycloak.clientId} onChange={(e) => setKeycloak((k) => ({ ...k, clientId: e.target.value }))} style={inputStyle} />
-              <input placeholder="Client Secret" value={keycloak.clientSecret} onChange={(e) => setKeycloak((k) => ({ ...k, clientSecret: e.target.value }))} style={inputStyle} />
-              <input placeholder="Username" value={keycloak.username} onChange={(e) => setKeycloak((k) => ({ ...k, username: e.target.value }))} style={inputStyle} />
-              <input type="password" placeholder="Password" value={keycloak.password} onChange={(e) => setKeycloak((k) => ({ ...k, password: e.target.value }))} style={inputStyle} />
+              <input placeholder={t("auth.keycloakServerUrl")} value={keycloak.serverUrl} onChange={(e) => setKeycloak((k) => ({ ...k, serverUrl: e.target.value }))} style={inputStyle} />
+              <input placeholder={t("auth.realm")} value={keycloak.realm} onChange={(e) => setKeycloak((k) => ({ ...k, realm: e.target.value }))} style={inputStyle} />
+              <input placeholder={t("auth.clientId")} value={keycloak.clientId} onChange={(e) => setKeycloak((k) => ({ ...k, clientId: e.target.value }))} style={inputStyle} />
+              <input placeholder={t("auth.clientSecretShort")} value={keycloak.clientSecret} onChange={(e) => setKeycloak((k) => ({ ...k, clientSecret: e.target.value }))} style={inputStyle} />
+              <input placeholder={t("auth.username")} value={keycloak.username} onChange={(e) => setKeycloak((k) => ({ ...k, username: e.target.value }))} style={inputStyle} />
+              <input type="password" placeholder={t("auth.password")} value={keycloak.password} onChange={(e) => setKeycloak((k) => ({ ...k, password: e.target.value }))} style={inputStyle} />
             </div>
           )}
           {authMode === "headers" && (
             <div>
               {headerRows.map((row, i) => (
                 <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                  <input placeholder="Header" value={row.key} onChange={(e) => updateHeaderRow(i, "key", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
-                  <input placeholder="Value" value={row.value} onChange={(e) => updateHeaderRow(i, "value", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                  <input placeholder={t("headers.headerPlaceholder")} value={row.key} onChange={(e) => updateHeaderRow(i, "key", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                  <input placeholder={t("headers.valuePlaceholder")} value={row.value} onChange={(e) => updateHeaderRow(i, "value", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
                   <button type="button" onClick={() => removeHeaderRow(i)} style={btnSecondary}>×</button>
                 </div>
               ))}
-              <button type="button" onClick={addHeaderRow} style={btnSecondary}>+ Заголовок</button>
+              <button type="button" onClick={addHeaderRow} style={btnSecondary}>{t("headers.addRow")}</button>
             </div>
           )}
           <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
             <input type="checkbox" checked={insecureSSL} onChange={(e) => setInsecureSSL(e.target.checked)} />
-            <span style={{ color: "var(--muted)" }}>Не проверять сертификат SSL</span>
+            <span style={{ color: "var(--muted)" }}>{t("ssl.insecureShort")}</span>
           </label>
           <button type="submit" disabled={loading} style={btnPrimary}>
-            {loading ? "Отправка…" : "Отправить SOAP"}
+            {loading ? t("submit.sending") : t("submit.soap")}
           </button>
         </form>
       )}
@@ -1111,7 +1129,7 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
       {activeTab === "graphql" && (
         <form onSubmit={handleGraphqlSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
-            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>История GraphQL-запросов</label>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>{t("history.graphqlLabel")}</label>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <select
                 value=""
@@ -1147,7 +1165,7 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
                   color: "var(--text)",
                 }}
               >
-                <option value="">— выбрать из истории —</option>
+                <option value="">{t("history.selectPlaceholder")}</option>
                 {graphqlHistory.map((h, i) => (
                   <option key={i} value={i}>POST {h.url}{h.graphqlOperationName ? ` (${h.graphqlOperationName})` : ""}</option>
                 ))}
@@ -1157,21 +1175,21 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
                 onClick={saveToHistoryGraphql}
                 disabled={!graphqlUrl.trim()}
                 style={btnSecondary}
-                title="Сохранить текущий запрос в историю"
+                title={t("history.saveGraphqlTitle")}
               >
-                Сохранить в историю
+                {t("history.save")}
               </button>
             </div>
             <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--muted)" }}>
-              История пополняется при отправке или по кнопке «Сохранить в историю». При выборе подставляются URL, запрос, переменные, имя операции и аутентификация.
+              {t("history.graphqlHint")}
             </p>
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>URL GraphQL endpoint</label>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>{t("graphql.urlLabel")}</label>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <input
                 type="url"
-                placeholder="https://api.example.com/graphql"
+                placeholder={t("graphql.urlPlaceholder")}
                 value={graphqlUrl}
                 onChange={(e) => setGraphqlUrl(e.target.value)}
                 required
@@ -1182,22 +1200,22 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
                 onClick={fetchSchema}
                 disabled={!graphqlUrl.trim() || loading}
                 style={btnSecondary}
-                title="Отправить стандартный introspection-запрос и показать схему API (если сервер поддерживает)"
+                title={t("graphql.loadSchemaTitle")}
               >
-                Загрузить схему
+                {t("graphql.loadSchema")}
               </button>
             </div>
             <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--muted)" }}>
-              Кнопка «Загрузить схему» отправляет introspection-запрос к endpoint и выводит схему в блок ответа. Работает, если сервер не отключал introspection.
+              {t("graphql.schemaHint")}
             </p>
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>Query</label>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>{t("graphql.queryLabel")}</label>
             <textarea
               value={graphqlQuery}
               onChange={(e) => setGraphqlQuery(e.target.value)}
               rows={10}
-              placeholder="query { ... }"
+              placeholder={t("graphql.queryPlaceholder")}
               style={{
                 width: "100%",
                 padding: 12,
@@ -1212,12 +1230,12 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
             />
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>Variables (JSON, опционально)</label>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>{t("graphql.variablesLabel")}</label>
             <textarea
               value={graphqlVariables}
               onChange={(e) => setGraphqlVariables(e.target.value)}
               rows={4}
-              placeholder={'{"id": "1"}'}
+              placeholder={t("graphql.variablesPlaceholder")}
               style={{
                 width: "100%",
                 padding: 12,
@@ -1232,55 +1250,55 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
             />
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>Operation name (опционально)</label>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>{t("graphql.operationLabel")}</label>
             <input
               type="text"
-              placeholder="GetUser"
+              placeholder={t("graphql.operationPlaceholder")}
               value={graphqlOperationName}
               onChange={(e) => setGraphqlOperationName(e.target.value)}
               style={{ ...inputStyle, width: "100%" }}
             />
           </div>
           <div>
-            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>Аутентификация</label>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>{t("auth.label")}</label>
             <select
               value={authMode}
               onChange={(e) => setAuthMode(e.target.value as AuthMode)}
               style={{ ...inputStyle, width: "100%" }}
             >
-              <option value="none">Без аутентификации</option>
-              <option value="keycloak">Keycloak</option>
-              <option value="headers">Ручные заголовки</option>
+              <option value="none">{t("auth.none")}</option>
+              <option value="keycloak">{t("auth.keycloak")}</option>
+              <option value="headers">{t("auth.headers")}</option>
             </select>
           </div>
           {authMode === "keycloak" && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <input placeholder="URL Keycloak" value={keycloak.serverUrl} onChange={(e) => setKeycloak((k) => ({ ...k, serverUrl: e.target.value }))} style={inputStyle} />
-              <input placeholder="Realm" value={keycloak.realm} onChange={(e) => setKeycloak((k) => ({ ...k, realm: e.target.value }))} style={inputStyle} />
-              <input placeholder="Client ID" value={keycloak.clientId} onChange={(e) => setKeycloak((k) => ({ ...k, clientId: e.target.value }))} style={inputStyle} />
-              <input placeholder="Client Secret" value={keycloak.clientSecret} onChange={(e) => setKeycloak((k) => ({ ...k, clientSecret: e.target.value }))} style={inputStyle} />
-              <input placeholder="Username" value={keycloak.username} onChange={(e) => setKeycloak((k) => ({ ...k, username: e.target.value }))} style={inputStyle} />
-              <input type="password" placeholder="Password" value={keycloak.password} onChange={(e) => setKeycloak((k) => ({ ...k, password: e.target.value }))} style={inputStyle} />
+              <input placeholder={t("auth.keycloakServerUrl")} value={keycloak.serverUrl} onChange={(e) => setKeycloak((k) => ({ ...k, serverUrl: e.target.value }))} style={inputStyle} />
+              <input placeholder={t("auth.realm")} value={keycloak.realm} onChange={(e) => setKeycloak((k) => ({ ...k, realm: e.target.value }))} style={inputStyle} />
+              <input placeholder={t("auth.clientId")} value={keycloak.clientId} onChange={(e) => setKeycloak((k) => ({ ...k, clientId: e.target.value }))} style={inputStyle} />
+              <input placeholder={t("auth.clientSecretShort")} value={keycloak.clientSecret} onChange={(e) => setKeycloak((k) => ({ ...k, clientSecret: e.target.value }))} style={inputStyle} />
+              <input placeholder={t("auth.username")} value={keycloak.username} onChange={(e) => setKeycloak((k) => ({ ...k, username: e.target.value }))} style={inputStyle} />
+              <input type="password" placeholder={t("auth.password")} value={keycloak.password} onChange={(e) => setKeycloak((k) => ({ ...k, password: e.target.value }))} style={inputStyle} />
             </div>
           )}
           {authMode === "headers" && (
             <div>
               {headerRows.map((row, i) => (
                 <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                  <input placeholder="Header" value={row.key} onChange={(e) => updateHeaderRow(i, "key", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
-                  <input placeholder="Value" value={row.value} onChange={(e) => updateHeaderRow(i, "value", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                  <input placeholder={t("headers.headerPlaceholder")} value={row.key} onChange={(e) => updateHeaderRow(i, "key", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                  <input placeholder={t("headers.valuePlaceholder")} value={row.value} onChange={(e) => updateHeaderRow(i, "value", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
                   <button type="button" onClick={() => removeHeaderRow(i)} style={btnSecondary}>×</button>
                 </div>
               ))}
-              <button type="button" onClick={addHeaderRow} style={btnSecondary}>+ Заголовок</button>
+              <button type="button" onClick={addHeaderRow} style={btnSecondary}>{t("headers.addRow")}</button>
             </div>
           )}
           <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
             <input type="checkbox" checked={insecureSSL} onChange={(e) => setInsecureSSL(e.target.checked)} />
-            <span style={{ color: "var(--muted)" }}>Не проверять сертификат SSL</span>
+            <span style={{ color: "var(--muted)" }}>{t("ssl.insecureShort")}</span>
           </label>
           <button type="submit" disabled={loading} style={btnPrimary}>
-            {loading ? "Отправка…" : "Отправить GraphQL"}
+            {loading ? t("submit.sending") : t("submit.graphql")}
           </button>
         </form>
       )}
@@ -1288,53 +1306,53 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
       {activeTab === "files" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <p style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>
-            Загрузка и скачивание файлов (S3-совместимое API). Используются те же настройки аутентификации и SSL, что и в других вкладках.
+            {t("files.intro")}
           </p>
           <div>
-            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>Аутентификация</label>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>{t("auth.label")}</label>
             <select
               value={authMode}
               onChange={(e) => setAuthMode(e.target.value as AuthMode)}
               style={{ ...inputStyle, width: "100%" }}
             >
-              <option value="none">Без аутентификации</option>
-              <option value="keycloak">Keycloak</option>
-              <option value="headers">Ручные заголовки</option>
+              <option value="none">{t("auth.none")}</option>
+              <option value="keycloak">{t("auth.keycloak")}</option>
+              <option value="headers">{t("auth.headers")}</option>
             </select>
           </div>
           {authMode === "keycloak" && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <input placeholder="URL Keycloak" value={keycloak.serverUrl} onChange={(e) => setKeycloak((k) => ({ ...k, serverUrl: e.target.value }))} style={inputStyle} />
-              <input placeholder="Realm" value={keycloak.realm} onChange={(e) => setKeycloak((k) => ({ ...k, realm: e.target.value }))} style={inputStyle} />
-              <input placeholder="Client ID" value={keycloak.clientId} onChange={(e) => setKeycloak((k) => ({ ...k, clientId: e.target.value }))} style={inputStyle} />
-              <input placeholder="Client Secret" value={keycloak.clientSecret} onChange={(e) => setKeycloak((k) => ({ ...k, clientSecret: e.target.value }))} style={inputStyle} />
-              <input placeholder="Username" value={keycloak.username} onChange={(e) => setKeycloak((k) => ({ ...k, username: e.target.value }))} style={inputStyle} />
-              <input type="password" placeholder="Password" value={keycloak.password} onChange={(e) => setKeycloak((k) => ({ ...k, password: e.target.value }))} style={inputStyle} />
+              <input placeholder={t("auth.keycloakServerUrl")} value={keycloak.serverUrl} onChange={(e) => setKeycloak((k) => ({ ...k, serverUrl: e.target.value }))} style={inputStyle} />
+              <input placeholder={t("auth.realm")} value={keycloak.realm} onChange={(e) => setKeycloak((k) => ({ ...k, realm: e.target.value }))} style={inputStyle} />
+              <input placeholder={t("auth.clientId")} value={keycloak.clientId} onChange={(e) => setKeycloak((k) => ({ ...k, clientId: e.target.value }))} style={inputStyle} />
+              <input placeholder={t("auth.clientSecretShort")} value={keycloak.clientSecret} onChange={(e) => setKeycloak((k) => ({ ...k, clientSecret: e.target.value }))} style={inputStyle} />
+              <input placeholder={t("auth.username")} value={keycloak.username} onChange={(e) => setKeycloak((k) => ({ ...k, username: e.target.value }))} style={inputStyle} />
+              <input type="password" placeholder={t("auth.password")} value={keycloak.password} onChange={(e) => setKeycloak((k) => ({ ...k, password: e.target.value }))} style={inputStyle} />
             </div>
           )}
           {authMode === "headers" && (
             <div>
               {headerRows.map((row, i) => (
                 <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                  <input placeholder="Header" value={row.key} onChange={(e) => updateHeaderRow(i, "key", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
-                  <input placeholder="Value" value={row.value} onChange={(e) => updateHeaderRow(i, "value", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                  <input placeholder={t("headers.headerPlaceholder")} value={row.key} onChange={(e) => updateHeaderRow(i, "key", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                  <input placeholder={t("headers.valuePlaceholder")} value={row.value} onChange={(e) => updateHeaderRow(i, "value", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
                   <button type="button" onClick={() => removeHeaderRow(i)} style={btnSecondary}>×</button>
                 </div>
               ))}
-              <button type="button" onClick={addHeaderRow} style={btnSecondary}>+ Заголовок</button>
+              <button type="button" onClick={addHeaderRow} style={btnSecondary}>{t("headers.addRow")}</button>
             </div>
           )}
           <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
             <input type="checkbox" checked={insecureSSL} onChange={(e) => setInsecureSSL(e.target.checked)} />
-            <span style={{ color: "var(--muted)" }}>Не проверять сертификат SSL</span>
+            <span style={{ color: "var(--muted)" }}>{t("ssl.insecureShort")}</span>
           </label>
 
           <div style={{ paddingTop: 8, borderTop: "1px solid var(--border)" }}>
-            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)", fontWeight: 600 }}>Скачивание</label>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)", fontWeight: 600 }}>{t("files.downloadLabel")}</label>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <input
                 type="url"
-                placeholder="https://bucket.s3.region.amazonaws.com/path/to/object"
+                placeholder={t("files.downloadUrlPlaceholder")}
                 value={fileDownloadUrl}
                 onChange={(e) => setFileDownloadUrl(e.target.value)}
                 style={{ ...inputStyle, flex: 1, minWidth: 200 }}
@@ -1345,18 +1363,18 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
                 disabled={!fileDownloadUrl.trim() || filesLoading}
                 style={btnPrimary}
               >
-                {filesLoading ? "Скачивание…" : "Скачать"}
+                {filesLoading ? t("files.downloading") : t("files.downloadBtn")}
               </button>
             </div>
           </div>
 
           <div style={{ paddingTop: 8, borderTop: "1px solid var(--border)" }}>
-            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)", fontWeight: 600 }}>Загрузка</label>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)", fontWeight: 600 }}>{t("files.uploadLabel")}</label>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <input
                   type="url"
-                  placeholder="URL объекта или presigned PUT"
+                  placeholder={t("files.uploadUrlPlaceholder")}
                   value={fileUploadUrl}
                   onChange={(e) => setFileUploadUrl(e.target.value)}
                   style={{ ...inputStyle, flex: 1, minWidth: 200 }}
@@ -1369,12 +1387,12 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
                   style={{ color: "var(--text)" }}
                 />
                 <span style={{ color: "var(--muted)", fontSize: 13 }}>
-                  {selectedFile ? `${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)} KB)` : "Файл не выбран"}
+                  {selectedFile ? `${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)} KB)` : t("files.fileNotSelected")}
                 </span>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--muted)" }}>
-                  Размер части (MB, для multipart):
+                  {t("files.chunkSizeLabel")}
                   <input
                     type="number"
                     min={5}
@@ -1389,18 +1407,18 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
                   onClick={doFileUploadSimple}
                   disabled={!fileUploadUrl.trim() || !selectedFile || filesLoading}
                   style={btnSecondary}
-                  title="Один PUT-запрос с телом файла"
+                  title={t("files.simpleUploadTitle")}
                 >
-                  Простая загрузка (PUT)
+                  {t("files.simpleUpload")}
                 </button>
                 <button
                   type="button"
                   onClick={doFileUploadMultipart}
                   disabled={!fileUploadUrl.trim() || !selectedFile || filesLoading}
                   style={btnSecondary}
-                  title="S3 Multipart: POST ?uploads → PUT части → POST complete"
+                  title={t("files.multipartUploadTitle")}
                 >
-                  Multipart S3
+                  {t("files.multipartUpload")}
                 </button>
               </div>
             </div>
@@ -1416,9 +1434,9 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
 
       <div style={{ marginTop: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <label style={{ color: "var(--muted)", fontWeight: 600 }}>Логи</label>
+          <label style={{ color: "var(--muted)", fontWeight: 600 }}>{t("logs.label")}</label>
           <button type="button" onClick={clearLogs} style={btnSecondary} disabled={logs.length === 0}>
-            Очистить
+            {t("logs.clear")}
           </button>
         </div>
         <div
@@ -1435,20 +1453,20 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
           }}
         >
           {logs.length === 0 ? (
-            <div style={{ color: "var(--muted)" }}>Здесь будут логи запросов: отправка, ответы, ошибки.</div>
+            <div style={{ color: "var(--muted)" }}>{t("logs.empty")}</div>
           ) : (
             [...logs].reverse().map((entry) =>
               entry.kind === "request_start" ? (
                 <div key={entry.id} style={{ marginTop: 8, marginBottom: 6 }}>
                   <div style={{ height: 1, background: "var(--border)", marginBottom: 6 }} />
                   <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.05em" }}>
-                    СТАРТ ЗАПРОСА
+                    {t("logs.requestStart")}
                   </div>
                 </div>
               ) : entry.kind === "request_end" ? (
                 <div key={entry.id} style={{ marginTop: 6, marginBottom: 8 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", letterSpacing: "0.05em", marginBottom: 6 }}>
-                    ФИНИШ ЗАПРОСА
+                    {t("logs.requestEnd")}
                   </div>
                   <div style={{ height: 1, background: "var(--border)" }} />
                 </div>
@@ -1492,7 +1510,7 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
       {response && (
         <div style={{ marginTop: 24 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-            <span style={{ color: "var(--muted)" }}>Ответ:</span>
+            <span style={{ color: "var(--muted)" }}>{t("response.label")}</span>
             <span style={{ color: response.status >= 400 ? "var(--error)" : "var(--success)", fontWeight: 600 }}>
               {response.status} {response.statusText}
             </span>
@@ -1502,20 +1520,20 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
                 onClick={() => setResponseView("json")}
                 style={{ ...btnSecondary, ...(responseView === "json" ? { background: "var(--accent-dim)", color: "white" } : {}) }}
               >
-                JSON
+                {t("response.jsonTab")}
               </button>
               <button
                 type="button"
                 onClick={() => setResponseView("table")}
                 style={{ ...btnSecondary, ...(responseView === "table" ? { background: "var(--accent-dim)", color: "white" } : {}) }}
               >
-                Таблица
+                {t("response.tableTab")}
               </button>
             </div>
           </div>
           {response.headers && Object.keys(response.headers).length > 0 && (
             <div style={{ marginBottom: 12 }}>
-              <div style={{ color: "var(--muted)", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Заголовки ответа</div>
+              <div style={{ color: "var(--muted)", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{t("response.headersTitle")}</div>
               <div
                 style={{
                   padding: 12,
@@ -1529,8 +1547,8 @@ ${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ET
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr>
-                      <th style={{ ...thStyle, width: "40%" }}>Имя</th>
-                      <th style={thStyle}>Значение</th>
+                      <th style={{ ...thStyle, width: "40%" }}>{t("response.nameCol")}</th>
+                      <th style={thStyle}>{t("response.valueCol")}</th>
                     </tr>
                   </thead>
                   <tbody>

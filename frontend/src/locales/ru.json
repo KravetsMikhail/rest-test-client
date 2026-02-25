@@ -1,0 +1,154 @@
+{
+  "app": {
+    "title": "REST Test Client",
+    "subtitle": "URL, метод, тело запроса, Keycloak или заголовки"
+  },
+  "lang": {
+    "label": "Язык",
+    "ru": "Русский",
+    "en": "English"
+  },
+  "theme": {
+    "label": "Тема:",
+    "light": "Светлая",
+    "dark": "Тёмная"
+  },
+  "tabs": {
+    "rest": "REST",
+    "soap": "SOAP",
+    "graphql": "GraphQL",
+    "files": "Файлы"
+  },
+  "history": {
+    "label": "История запросов",
+    "selectPlaceholder": "— выбрать из истории —",
+    "save": "Сохранить в историю",
+    "hint": "История пополняется при отправке запроса или по кнопке «Сохранить в историю». При выборе подставляются URL, метод и настройки аутентификации (Keycloak или заголовки).",
+    "hintEncrypt": "Пароли и токены в истории шифруются.",
+    "soapLabel": "История SOAP-запросов",
+    "soapHint": "История пополняется при отправке запроса или по кнопке «Сохранить в историю». При выборе подставляются URL, SOAPAction, тело и аутентификация.",
+    "graphqlLabel": "История GraphQL-запросов",
+    "graphqlHint": "История пополняется при отправке или по кнопке «Сохранить в историю». При выборе подставляются URL, запрос, переменные, имя операции и аутентификация.",
+    "saveRestTitle": "Сохранить текущие URL и метод в историю",
+    "saveSoapTitle": "Сохранить текущие URL, SOAPAction и тело в историю",
+    "saveGraphqlTitle": "Сохранить текущий запрос в историю",
+    "authKeycloak": " (Keycloak)",
+    "authHeaders": " (заголовки)"
+  },
+  "rest": {
+    "bodyLabel": "Тело запроса (JSON)",
+    "bodyPlaceholder": "{\"key\": \"value\"}",
+    "urlPlaceholder": "https://api.example.com/path?param=value"
+  },
+  "auth": {
+    "label": "Аутентификация",
+    "none": "Без аутентификации",
+    "keycloak": "Keycloak",
+    "headers": "Ручные заголовки",
+    "keycloakServerUrl": "URL сервера Keycloak",
+    "realm": "Realm",
+    "clientId": "Client ID",
+    "clientSecret": "Client Secret (опционально)",
+    "clientSecretShort": "Client Secret",
+    "username": "Username",
+    "password": "Password"
+  },
+  "headers": {
+    "label": "Заголовки",
+    "add": "+ Добавить",
+    "addRow": "+ Заголовок",
+    "headerPlaceholder": "Header",
+    "valuePlaceholder": "Value"
+  },
+  "ssl": {
+    "insecure": "Не проверять сертификат SSL (для самоподписанных / внутренних HTTPS — только для тестов)",
+    "insecureShort": "Не проверять сертификат SSL"
+  },
+  "submit": {
+    "send": "Отправить",
+    "sending": "Отправка…",
+    "soap": "Отправить SOAP",
+    "graphql": "Отправить GraphQL"
+  },
+  "soap": {
+    "urlLabel": "URL SOAP-сервиса",
+    "urlPlaceholder": "https://example.com/soap",
+    "actionLabel": "SOAPAction (опционально)",
+    "actionPlaceholder": "http://example.com/GetData",
+    "bodyLabel": "Тело запроса (XML, SOAP Envelope)",
+    "bodyPlaceholder": "<?xml version=\"1.0\"?>..."
+  },
+  "graphql": {
+    "urlLabel": "URL GraphQL endpoint",
+    "urlPlaceholder": "https://api.example.com/graphql",
+    "loadSchema": "Загрузить схему",
+    "loadSchemaTitle": "Отправить стандартный introspection-запрос и показать схему API (если сервер поддерживает)",
+    "schemaHint": "Кнопка «Загрузить схему» отправляет introspection-запрос к endpoint и выводит схему в блок ответа. Работает, если сервер не отключал introspection.",
+    "queryLabel": "Query",
+    "queryPlaceholder": "query { ... }",
+    "variablesLabel": "Variables (JSON, опционально)",
+    "variablesPlaceholder": "{\"id\": \"1\"}",
+    "operationLabel": "Operation name (опционально)",
+    "operationPlaceholder": "GetUser"
+  },
+  "files": {
+    "intro": "Загрузка и скачивание файлов (S3-совместимое API). Используются те же настройки аутентификации и SSL, что и в других вкладках.",
+    "downloadLabel": "Скачивание",
+    "downloadUrlPlaceholder": "https://bucket.s3.region.amazonaws.com/path/to/object",
+    "downloadBtn": "Скачать",
+    "downloading": "Скачивание…",
+    "uploadLabel": "Загрузка",
+    "uploadUrlPlaceholder": "URL объекта или presigned PUT",
+    "fileNotSelected": "Файл не выбран",
+    "chunkSizeLabel": "Размер части (MB, для multipart):",
+    "simpleUpload": "Простая загрузка (PUT)",
+    "simpleUploadTitle": "Один PUT-запрос с телом файла",
+    "multipartUpload": "Multipart S3",
+    "multipartUploadTitle": "S3 Multipart: POST ?uploads → PUT части → POST complete"
+  },
+  "response": {
+    "label": "Ответ:",
+    "headersTitle": "Заголовки ответа",
+    "jsonTab": "JSON",
+    "tableTab": "Таблица",
+    "nameCol": "Имя",
+    "valueCol": "Значение"
+  },
+  "logs": {
+    "label": "Логи",
+    "clear": "Очистить",
+    "empty": "Здесь будут логи запросов: отправка, ответы, ошибки.",
+    "requestStart": "СТАРТ ЗАПРОСА",
+    "requestEnd": "ФИНИШ ЗАПРОСА"
+  },
+  "log": {
+    "keycloakAuth": "Аутентификация через Keycloak…",
+    "requestSend": "Отправка запроса: {{method}} {{url}}",
+    "response": "Ответ {{status}} {{statusText}} за {{duration}} мс",
+    "responseShort": "Ответ {{status}} за {{duration}} мс",
+    "bodySize": "Размер тела: {{size}} байт",
+    "sizeBytes": "Размер: {{size}} байт",
+    "error": "Ошибка: {{msg}}",
+    "errorTime": "Время: {{duration}} мс",
+    "fail": "Сбой запроса: {{msg}}",
+    "failTime": "Время до ошибки: {{duration}} мс",
+    "soapRequest": "SOAP запрос: POST {{url}}",
+    "graphqlRequest": "GraphQL запрос: POST {{url}}",
+    "schemaRequest": "Запрос схемы GraphQL (introspection): POST {{url}}",
+    "schemaError": "Ошибка схемы: {{msg}}",
+    "schemaOk": "Схема получена: {{status}} за {{duration}} мс",
+    "fileDownload": "Скачивание файла: GET {{url}}",
+    "fileSaved": "Файл сохранён: {{filename}}",
+    "fileUploadPut": "Загрузка файла (PUT): {{name}}",
+    "uploadIdMissing": "В ответе инициализации не найден UploadId",
+    "uploadIdNotFound": "Не найден UploadId в XML",
+    "multipartInit": "Multipart: инициализация POST {{url}}",
+    "multipartPart": "Часть {{p}}/{{total}}",
+    "multipartComplete": "Multipart: завершение (POST complete)",
+    "multipartDone": "Multipart загрузка завершена за {{duration}} мс"
+  },
+  "errors": {
+    "uploadIdMissing": "В ответе инициализации не найден UploadId",
+    "requestFailed": "Request failed"
+  }
+}
