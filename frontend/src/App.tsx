@@ -233,8 +233,9 @@ export default function App() {
       }
       setResponse(data);
       const size = typeof data.body === "string" ? new Blob([data.body]).size : 0;
+      const logLevel: LogLevel = data.status >= 500 ? "error" : data.status >= 400 ? "warn" : "success";
       addLog(
-        "success",
+        logLevel,
         `Ответ ${data.status} ${data.statusText} за ${duration} мс`,
         `Размер тела: ${size} байт`
       );
@@ -573,6 +574,38 @@ export default function App() {
               </button>
             </div>
           </div>
+          {response.headers && Object.keys(response.headers).length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ color: "var(--muted)", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Заголовки ответа</div>
+              <div
+                style={{
+                  padding: 12,
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  overflow: "auto",
+                  maxHeight: 200,
+                }}
+              >
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...thStyle, width: "40%" }}>Имя</th>
+                      <th style={thStyle}>Значение</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(response.headers).map(([name, value]) => (
+                      <tr key={name}>
+                        <td style={{ ...tdStyle, color: "var(--muted)", verticalAlign: "top" }}>{name}</td>
+                        <td style={{ ...tdStyle, wordBreak: "break-all" }}>{value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
           <div
             style={{
               padding: 16,
