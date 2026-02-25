@@ -42,6 +42,7 @@ interface ExecuteResponse {
   statusText: string;
   headers: Record<string, string>;
   body: string;
+  bodyBase64?: string;
   contentType: string;
 }
 
@@ -83,6 +84,29 @@ function jsonToRows(data: unknown): { headers: string[]; rows: Record<string, un
   return { headers, rows };
 }
 
+const INTROSPECTION_QUERY = `
+  query IntrospectionQuery {
+    __schema {
+      queryType { name }
+      mutationType { name }
+      subscriptionType { name }
+      types {
+        kind
+        name
+        description
+        fields(includeDeprecated: true) {
+          name
+          description
+          type { kind name }
+          args { name type { kind name } }
+        }
+        inputFields { name type { kind name } }
+        enumValues(includeDeprecated: true) { name description }
+      }
+    }
+  }
+`.trim();
+
 export default function App() {
   const [url, setUrl] = useState("");
   const [method, setMethod] = useState<"GET" | "POST" | "PUT" | "DELETE">("GET");
@@ -106,6 +130,9 @@ export default function App() {
     headers?: Record<string, string>;
     soapAction?: string;
     soapBody?: string;
+    graphqlQuery?: string;
+    graphqlVariables?: string;
+    graphqlOperationName?: string;
   }[]>([]);
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<ExecuteResponse | null>(null);
@@ -113,13 +140,22 @@ export default function App() {
   const [responseView, setResponseView] = useState<"json" | "table">("json");
   const [insecureSSL, setInsecureSSL] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">(getInitialTheme);
-  const [activeTab, setActiveTab] = useState<"rest" | "soap">("rest");
+  const [activeTab, setActiveTab] = useState<"rest" | "soap" | "graphql" | "files">("rest");
   const [soapUrl, setSoapUrl] = useState("");
   const [soapAction, setSoapAction] = useState("");
   const [soapBody, setSoapBody] = useState(`<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body></soap:Body>
 </soap:Envelope>`);
+  const [graphqlUrl, setGraphqlUrl] = useState("");
+  const [graphqlQuery, setGraphqlQuery] = useState("query { __typename }");
+  const [graphqlVariables, setGraphqlVariables] = useState("");
+  const [graphqlOperationName, setGraphqlOperationName] = useState("");
+  const [fileUploadUrl, setFileUploadUrl] = useState("");
+  const [fileDownloadUrl, setFileDownloadUrl] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileChunkSizeMb, setFileChunkSizeMb] = useState(5);
+  const [filesLoading, setFilesLoading] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const requestStartRef = useRef<number>(0);
 
@@ -174,6 +210,9 @@ export default function App() {
               headers: e?.headers,
               soapAction: e?.soapAction,
               soapBody: e?.soapBody,
+              graphqlQuery: e?.graphqlQuery,
+              graphqlVariables: e?.graphqlVariables,
+              graphqlOperationName: e?.graphqlOperationName,
             }))
           : []
       );
@@ -203,7 +242,9 @@ export default function App() {
     }
   }, [url, method, authMode, keycloak, headersRecord, loadHistory]);
 
+  const restHistory = history.filter((e) => !e.soapAction && !e.soapBody && !e.graphqlQuery);
   const soapHistory = history.filter((e) => e.soapAction != null || e.soapBody != null);
+  const graphqlHistory = history.filter((e) => e.graphqlQuery != null);
 
   const saveToHistorySoap = useCallback(async () => {
     const u = soapUrl.trim();
@@ -227,6 +268,30 @@ export default function App() {
       // ignore
     }
   }, [soapUrl, soapAction, soapBody, authMode, keycloak, headersRecord, loadHistory]);
+
+  const saveToHistoryGraphql = useCallback(async () => {
+    const u = graphqlUrl.trim();
+    if (!u) return;
+    try {
+      await fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: u,
+          method: "POST",
+          authMode,
+          keycloak: authMode === "keycloak" ? keycloak : undefined,
+          headers: authMode === "headers" && Object.keys(headersRecord).length > 0 ? headersRecord : undefined,
+          graphqlQuery: graphqlQuery.trim() || undefined,
+          graphqlVariables: graphqlVariables.trim() || undefined,
+          graphqlOperationName: graphqlOperationName.trim() || undefined,
+        }),
+      });
+      await loadHistory();
+    } catch {
+      // ignore
+    }
+  }, [graphqlUrl, graphqlQuery, graphqlVariables, graphqlOperationName, authMode, keycloak, headersRecord, loadHistory]);
 
   useEffect(() => {
     loadHistory();
@@ -351,6 +416,294 @@ export default function App() {
     }
   };
 
+  const handleGraphqlSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setResponse(null);
+    setLoading(true);
+    const targetUrl = graphqlUrl.trim();
+    if (!targetUrl) {
+      setLoading(false);
+      return;
+    }
+    addRequestBoundary("request_start");
+    addLog("info", `GraphQL запрос: POST ${targetUrl}`);
+    if (authMode === "keycloak") addLog("info", "Аутентификация через Keycloak…");
+    requestStartRef.current = performance.now();
+    let variables: Record<string, unknown> = {};
+    if (graphqlVariables.trim()) {
+      const parsed = parseJsonSafe(graphqlVariables.trim());
+      variables = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+    }
+    const gqlBody = JSON.stringify({
+      query: graphqlQuery.trim(),
+      ...(Object.keys(variables).length > 0 && { variables: variables }),
+      ...(graphqlOperationName.trim() && { operationName: graphqlOperationName.trim() }),
+    });
+    const gqlHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...headersRecord,
+    };
+    try {
+      const res = await fetch("/api/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: targetUrl,
+          method: "POST",
+          headers: gqlHeaders,
+          body: gqlBody,
+          insecure: insecureSSL,
+          graphqlQuery: graphqlQuery.trim() || undefined,
+          graphqlVariables: graphqlVariables.trim() || undefined,
+          graphqlOperationName: graphqlOperationName.trim() || undefined,
+          keycloak: authMode === "keycloak" ? keycloak : undefined,
+        }),
+      });
+      const data = await res.json();
+      const duration = Math.round(performance.now() - requestStartRef.current);
+      if (!res.ok) {
+        setError(data.error || `HTTP ${res.status}`);
+        addLog("error", `Ошибка: ${data.error || res.status}`, `Время: ${duration} мс`);
+        return;
+      }
+      setResponse(data);
+      const logLevel: LogLevel = data.status >= 500 ? "error" : data.status >= 400 ? "warn" : "success";
+      addLog(logLevel, `Ответ ${data.status} ${data.statusText} за ${duration} мс`, `Размер: ${typeof data.body === "string" ? new Blob([data.body]).size : 0} байт`);
+    } catch (err) {
+      const duration = Math.round(performance.now() - requestStartRef.current);
+      addLog("error", `Сбой: ${err instanceof Error ? err.message : "Request failed"}`, `Время: ${duration} мс`);
+      setError(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      addRequestBoundary("request_end");
+      setLoading(false);
+    }
+  };
+
+  const fetchSchema = useCallback(async () => {
+    const targetUrl = graphqlUrl.trim();
+    if (!targetUrl) return;
+    setError(null);
+    setResponse(null);
+    setLoading(true);
+    addRequestBoundary("request_start");
+    addLog("info", "Запрос схемы GraphQL (introspection): POST " + targetUrl);
+    requestStartRef.current = performance.now();
+    const gqlHeaders: Record<string, string> = { "Content-Type": "application/json", ...headersRecord };
+    try {
+      const res = await fetch("/api/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: targetUrl,
+          method: "POST",
+          headers: gqlHeaders,
+          body: JSON.stringify({ query: INTROSPECTION_QUERY }),
+          insecure: insecureSSL,
+          keycloak: authMode === "keycloak" ? keycloak : undefined,
+        }),
+      });
+      const data = await res.json();
+      const duration = Math.round(performance.now() - requestStartRef.current);
+      if (!res.ok) {
+        setError(data.error || `HTTP ${res.status}`);
+        addLog("error", `Ошибка схемы: ${data.error || res.status}`, `Время: ${duration} мс`);
+        return;
+      }
+      setResponse(data);
+      const logLevel: LogLevel = data.status >= 500 ? "error" : data.status >= 400 ? "warn" : "success";
+      addLog(logLevel, `Схема получена: ${data.status} за ${duration} мс`, `Размер: ${typeof data.body === "string" ? new Blob([data.body]).size : 0} байт`);
+    } catch (err) {
+      const duration = Math.round(performance.now() - requestStartRef.current);
+      addLog("error", `Сбой: ${err instanceof Error ? err.message : "Request failed"}`, `Время: ${duration} мс`);
+      setError(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      addRequestBoundary("request_end");
+      setLoading(false);
+    }
+  }, [graphqlUrl, headersRecord, insecureSSL, authMode, keycloak]);
+
+  const executeFileRequest = useCallback(async (payload: {
+    url: string;
+    method: string;
+    headers?: Record<string, string>;
+    body?: string;
+    bodyBase64?: string;
+  }): Promise<ExecuteResponse> => {
+    const res = await fetch("/api/execute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: payload.url,
+        method: payload.method,
+        headers: payload.headers ?? headersRecord,
+        body: payload.body,
+        bodyBase64: payload.bodyBase64,
+        insecure: insecureSSL,
+        keycloak: authMode === "keycloak" ? keycloak : undefined,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  }, [headersRecord, insecureSSL, authMode, keycloak]);
+
+  const doFileDownload = useCallback(async () => {
+    const targetUrl = fileDownloadUrl.trim();
+    if (!targetUrl) return;
+    setError(null);
+    setFilesLoading(true);
+    addRequestBoundary("request_start");
+    addLog("info", "Скачивание файла: GET " + targetUrl);
+    const t0 = performance.now();
+    try {
+      const data = await executeFileRequest({ url: targetUrl, method: "GET" });
+      addLog(data.status >= 400 ? "warn" : "success", `Ответ ${data.status} за ${Math.round(performance.now() - t0)} мс`, "");
+      if (data.status < 200 || data.status >= 300) {
+        setError(`HTTP ${data.status} ${data.statusText}`);
+        return;
+      }
+      let blob: Blob;
+      let filename = "";
+      if (data.bodyBase64) {
+        const bin = atob(data.bodyBase64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        blob = new Blob([bytes], { type: data.contentType || "application/octet-stream" });
+        const disp = data.headers["content-disposition"] || data.headers["Content-Disposition"];
+        const m = disp && /filename\*?=(?:UTF-8'')?["']?([^"'\s;]+)["']?|filename=["']?([^"'\s;]+)["']?/i.exec(disp);
+        if (m) filename = decodeURIComponent((m[1] || m[2] || "").replace(/^"(.*)"$/, "$1"));
+        if (!filename) {
+          const pathPart = targetUrl.replace(/#.*$/, "").split("?")[0];
+          filename = pathPart.split("/").pop() || "download";
+        }
+      } else {
+        blob = new Blob([data.body], { type: data.contentType || "application/octet-stream" });
+        const pathPart = targetUrl.replace(/#.*$/, "").split("?")[0];
+        filename = pathPart.split("/").pop() || "download";
+      }
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename || "download";
+      a.click();
+      URL.revokeObjectURL(a.href);
+      addLog("info", "Файл сохранён: " + (filename || "download"), "");
+    } catch (err) {
+      addLog("error", `Сбой: ${err instanceof Error ? err.message : "Request failed"}`, "");
+      setError(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      addRequestBoundary("request_end");
+      setFilesLoading(false);
+    }
+  }, [fileDownloadUrl, executeFileRequest]);
+
+  const doFileUploadSimple = useCallback(async () => {
+    const targetUrl = fileUploadUrl.trim();
+    if (!targetUrl || !selectedFile) return;
+    setError(null);
+    setFilesLoading(true);
+    addRequestBoundary("request_start");
+    addLog("info", "Загрузка файла (PUT): " + selectedFile.name);
+    const t0 = performance.now();
+    try {
+      const buf = await selectedFile.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let b64 = "";
+      const chunkSize = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        b64 += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+      }
+      const bodyBase64 = btoa(b64);
+      const headers: Record<string, string> = { ...headersRecord };
+      if (!headers["Content-Type"]) headers["Content-Type"] = selectedFile.type || "application/octet-stream";
+      await executeFileRequest({
+        url: targetUrl,
+        method: "PUT",
+        headers,
+        bodyBase64,
+      });
+      addLog("success", `Загрузка завершена за ${Math.round(performance.now() - t0)} мс`, "");
+    } catch (err) {
+      addLog("error", `Сбой: ${err instanceof Error ? err.message : "Request failed"}`, "");
+      setError(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      addRequestBoundary("request_end");
+      setFilesLoading(false);
+    }
+  }, [fileUploadUrl, selectedFile, headersRecord, executeFileRequest]);
+
+  const doFileUploadMultipart = useCallback(async () => {
+    const targetUrl = fileUploadUrl.trim();
+    if (!targetUrl || !selectedFile) return;
+    setError(null);
+    setFilesLoading(true);
+    addRequestBoundary("request_start");
+    const t0 = performance.now();
+    const chunkSizeBytes = Math.max(5, Math.min(100, fileChunkSizeMb)) * 1024 * 1024;
+    const sep = targetUrl.includes("?") ? "&" : "?";
+    try {
+      addLog("info", "Multipart: инициализация POST " + targetUrl + sep + "uploads");
+      const initRes = await executeFileRequest({
+        url: targetUrl + sep + "uploads",
+        method: "POST",
+        headers: { ...headersRecord },
+      });
+      const initBody = initRes.body || "";
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(initBody, "text/xml");
+      const uploadIdEl = doc.querySelector("UploadId");
+      const uploadId = uploadIdEl?.textContent?.trim();
+      if (!uploadId) {
+        setError("В ответе инициализации не найден UploadId");
+        addLog("error", "Не найден UploadId в XML", initBody.slice(0, 500));
+        return;
+      }
+      addLog("info", "UploadId: " + uploadId, "");
+      const fileBuf = await selectedFile.arrayBuffer();
+      const totalSize = fileBuf.byteLength;
+      const partCount = Math.ceil(totalSize / chunkSizeBytes);
+      const etags: { PartNumber: number; ETag: string }[] = [];
+      for (let p = 1; p <= partCount; p++) {
+        const start = (p - 1) * chunkSizeBytes;
+        const end = Math.min(start + chunkSizeBytes, totalSize);
+        const chunk = new Uint8Array(fileBuf, start, end - start);
+        let b64 = "";
+        const subChunk = 0x8000;
+        for (let i = 0; i < chunk.length; i += subChunk) {
+          b64 += String.fromCharCode.apply(null, chunk.subarray(i, i + subChunk));
+        }
+        const partUrl = targetUrl + sep + "uploadId=" + encodeURIComponent(uploadId) + "&partNumber=" + p;
+        addLog("info", `Часть ${p}/${partCount}`, "");
+        const partRes = await executeFileRequest({
+          url: partUrl,
+          method: "PUT",
+          bodyBase64: btoa(b64),
+          headers: { ...headersRecord, "Content-Type": selectedFile.type || "application/octet-stream" },
+        });
+        const etag = partRes.headers?.ETag ?? partRes.headers?.etag ?? "";
+        etags.push({ PartNumber: p, ETag: etag });
+      }
+      const completeBody = `<?xml version="1.0" encoding="UTF-8"?>
+<CompleteMultipartUpload xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+${etags.map((e) => `  <Part><PartNumber>${e.PartNumber}</PartNumber><ETag>${e.ETag}</ETag></Part>`).join("\n")}
+</CompleteMultipartUpload>`;
+      addLog("info", "Multipart: завершение (POST complete)", "");
+      await executeFileRequest({
+        url: targetUrl + sep + "uploadId=" + encodeURIComponent(uploadId),
+        method: "POST",
+        headers: { ...headersRecord, "Content-Type": "application/xml" },
+        body: completeBody,
+      });
+      addLog("success", `Multipart загрузка завершена за ${Math.round(performance.now() - t0)} мс`, "");
+    } catch (err) {
+      addLog("error", `Сбой: ${err instanceof Error ? err.message : "Request failed"}`, "");
+      setError(err instanceof Error ? err.message : "Request failed");
+    } finally {
+      addRequestBoundary("request_end");
+      setFilesLoading(false);
+    }
+  }, [fileUploadUrl, selectedFile, fileChunkSizeMb, headersRecord, executeFileRequest]);
+
   const parsedBody = response?.contentType?.includes("json") ? parseJsonSafe(response.body) : null;
   const { headers: tableHeaders, rows: tableRows } = parsedBody != null ? jsonToRows(parsedBody) : { headers: [] as string[], rows: [] as Record<string, unknown>[] };
 
@@ -406,6 +759,26 @@ export default function App() {
         >
           SOAP
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("graphql")}
+          style={{
+            ...btnSecondary,
+            ...(activeTab === "graphql" ? { background: "var(--accent-dim)", color: "white", borderColor: "var(--accent-dim)" } : {}),
+          }}
+        >
+          GraphQL
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("files")}
+          style={{
+            ...btnSecondary,
+            ...(activeTab === "files" ? { background: "var(--accent-dim)", color: "white", borderColor: "var(--accent-dim)" } : {}),
+          }}
+        >
+          Файлы
+        </button>
       </div>
 
       {activeTab === "rest" && (
@@ -419,7 +792,7 @@ export default function App() {
                 const v = e.target.value;
                 if (v === "") return;
                 const i = parseInt(v, 10);
-                const entry = history[i];
+                const entry = restHistory[i];
                 if (isNaN(i) || !entry) return;
                 setUrl(entry.url);
                 setMethod(entry.method as "GET" | "POST" | "PUT" | "DELETE");
@@ -446,7 +819,7 @@ export default function App() {
               }}
             >
               <option value="">— выбрать из истории —</option>
-              {history.map((h, i) => {
+              {restHistory.map((h, i) => {
                 const authLabel = h.authMode === "keycloak" ? " (Keycloak)" : h.authMode === "headers" ? " (заголовки)" : "";
                 return (
                   <option key={i} value={i}>{h.method} {h.url}{authLabel}</option>
@@ -733,6 +1106,306 @@ export default function App() {
             {loading ? "Отправка…" : "Отправить SOAP"}
           </button>
         </form>
+      )}
+
+      {activeTab === "graphql" && (
+        <form onSubmit={handleGraphqlSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>История GraphQL-запросов</label>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <select
+                value=""
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "") return;
+                  const i = parseInt(v, 10);
+                  const entry = graphqlHistory[i];
+                  if (isNaN(i) || !entry) return;
+                  setGraphqlUrl(entry.url);
+                  setGraphqlQuery(entry.graphqlQuery ?? "");
+                  setGraphqlVariables(entry.graphqlVariables ?? "");
+                  setGraphqlOperationName(entry.graphqlOperationName ?? "");
+                  setAuthMode(entry.authMode ?? "none");
+                  if (entry.authMode === "keycloak" && entry.keycloak) {
+                    setKeycloak({ ...defaultKeycloak, ...entry.keycloak });
+                  } else {
+                    setKeycloak(defaultKeycloak);
+                  }
+                  if (entry.authMode === "headers" && entry.headers && Object.keys(entry.headers).length > 0) {
+                    setHeaderRows(Object.entries(entry.headers).map(([key, value]) => ({ key, value })));
+                  } else {
+                    setHeaderRows([{ key: "", value: "" }]);
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  minWidth: 200,
+                  padding: "10px 12px",
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  color: "var(--text)",
+                }}
+              >
+                <option value="">— выбрать из истории —</option>
+                {graphqlHistory.map((h, i) => (
+                  <option key={i} value={i}>POST {h.url}{h.graphqlOperationName ? ` (${h.graphqlOperationName})` : ""}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={saveToHistoryGraphql}
+                disabled={!graphqlUrl.trim()}
+                style={btnSecondary}
+                title="Сохранить текущий запрос в историю"
+              >
+                Сохранить в историю
+              </button>
+            </div>
+            <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--muted)" }}>
+              История пополняется при отправке или по кнопке «Сохранить в историю». При выборе подставляются URL, запрос, переменные, имя операции и аутентификация.
+            </p>
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>URL GraphQL endpoint</label>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <input
+                type="url"
+                placeholder="https://api.example.com/graphql"
+                value={graphqlUrl}
+                onChange={(e) => setGraphqlUrl(e.target.value)}
+                required
+                style={{ ...inputStyle, flex: 1, minWidth: 200 }}
+              />
+              <button
+                type="button"
+                onClick={fetchSchema}
+                disabled={!graphqlUrl.trim() || loading}
+                style={btnSecondary}
+                title="Отправить стандартный introspection-запрос и показать схему API (если сервер поддерживает)"
+              >
+                Загрузить схему
+              </button>
+            </div>
+            <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--muted)" }}>
+              Кнопка «Загрузить схему» отправляет introspection-запрос к endpoint и выводит схему в блок ответа. Работает, если сервер не отключал introspection.
+            </p>
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>Query</label>
+            <textarea
+              value={graphqlQuery}
+              onChange={(e) => setGraphqlQuery(e.target.value)}
+              rows={10}
+              placeholder="query { ... }"
+              style={{
+                width: "100%",
+                padding: 12,
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                color: "var(--text)",
+                fontFamily: "var(--font)",
+                fontSize: 13,
+                resize: "vertical",
+              }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>Variables (JSON, опционально)</label>
+            <textarea
+              value={graphqlVariables}
+              onChange={(e) => setGraphqlVariables(e.target.value)}
+              rows={4}
+              placeholder={'{"id": "1"}'}
+              style={{
+                width: "100%",
+                padding: 12,
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                color: "var(--text)",
+                fontFamily: "var(--font)",
+                fontSize: 13,
+                resize: "vertical",
+              }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>Operation name (опционально)</label>
+            <input
+              type="text"
+              placeholder="GetUser"
+              value={graphqlOperationName}
+              onChange={(e) => setGraphqlOperationName(e.target.value)}
+              style={{ ...inputStyle, width: "100%" }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>Аутентификация</label>
+            <select
+              value={authMode}
+              onChange={(e) => setAuthMode(e.target.value as AuthMode)}
+              style={{ ...inputStyle, width: "100%" }}
+            >
+              <option value="none">Без аутентификации</option>
+              <option value="keycloak">Keycloak</option>
+              <option value="headers">Ручные заголовки</option>
+            </select>
+          </div>
+          {authMode === "keycloak" && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <input placeholder="URL Keycloak" value={keycloak.serverUrl} onChange={(e) => setKeycloak((k) => ({ ...k, serverUrl: e.target.value }))} style={inputStyle} />
+              <input placeholder="Realm" value={keycloak.realm} onChange={(e) => setKeycloak((k) => ({ ...k, realm: e.target.value }))} style={inputStyle} />
+              <input placeholder="Client ID" value={keycloak.clientId} onChange={(e) => setKeycloak((k) => ({ ...k, clientId: e.target.value }))} style={inputStyle} />
+              <input placeholder="Client Secret" value={keycloak.clientSecret} onChange={(e) => setKeycloak((k) => ({ ...k, clientSecret: e.target.value }))} style={inputStyle} />
+              <input placeholder="Username" value={keycloak.username} onChange={(e) => setKeycloak((k) => ({ ...k, username: e.target.value }))} style={inputStyle} />
+              <input type="password" placeholder="Password" value={keycloak.password} onChange={(e) => setKeycloak((k) => ({ ...k, password: e.target.value }))} style={inputStyle} />
+            </div>
+          )}
+          {authMode === "headers" && (
+            <div>
+              {headerRows.map((row, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <input placeholder="Header" value={row.key} onChange={(e) => updateHeaderRow(i, "key", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                  <input placeholder="Value" value={row.value} onChange={(e) => updateHeaderRow(i, "value", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                  <button type="button" onClick={() => removeHeaderRow(i)} style={btnSecondary}>×</button>
+                </div>
+              ))}
+              <button type="button" onClick={addHeaderRow} style={btnSecondary}>+ Заголовок</button>
+            </div>
+          )}
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            <input type="checkbox" checked={insecureSSL} onChange={(e) => setInsecureSSL(e.target.checked)} />
+            <span style={{ color: "var(--muted)" }}>Не проверять сертификат SSL</span>
+          </label>
+          <button type="submit" disabled={loading} style={btnPrimary}>
+            {loading ? "Отправка…" : "Отправить GraphQL"}
+          </button>
+        </form>
+      )}
+
+      {activeTab === "files" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <p style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>
+            Загрузка и скачивание файлов (S3-совместимое API). Используются те же настройки аутентификации и SSL, что и в других вкладках.
+          </p>
+          <div>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)" }}>Аутентификация</label>
+            <select
+              value={authMode}
+              onChange={(e) => setAuthMode(e.target.value as AuthMode)}
+              style={{ ...inputStyle, width: "100%" }}
+            >
+              <option value="none">Без аутентификации</option>
+              <option value="keycloak">Keycloak</option>
+              <option value="headers">Ручные заголовки</option>
+            </select>
+          </div>
+          {authMode === "keycloak" && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <input placeholder="URL Keycloak" value={keycloak.serverUrl} onChange={(e) => setKeycloak((k) => ({ ...k, serverUrl: e.target.value }))} style={inputStyle} />
+              <input placeholder="Realm" value={keycloak.realm} onChange={(e) => setKeycloak((k) => ({ ...k, realm: e.target.value }))} style={inputStyle} />
+              <input placeholder="Client ID" value={keycloak.clientId} onChange={(e) => setKeycloak((k) => ({ ...k, clientId: e.target.value }))} style={inputStyle} />
+              <input placeholder="Client Secret" value={keycloak.clientSecret} onChange={(e) => setKeycloak((k) => ({ ...k, clientSecret: e.target.value }))} style={inputStyle} />
+              <input placeholder="Username" value={keycloak.username} onChange={(e) => setKeycloak((k) => ({ ...k, username: e.target.value }))} style={inputStyle} />
+              <input type="password" placeholder="Password" value={keycloak.password} onChange={(e) => setKeycloak((k) => ({ ...k, password: e.target.value }))} style={inputStyle} />
+            </div>
+          )}
+          {authMode === "headers" && (
+            <div>
+              {headerRows.map((row, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <input placeholder="Header" value={row.key} onChange={(e) => updateHeaderRow(i, "key", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                  <input placeholder="Value" value={row.value} onChange={(e) => updateHeaderRow(i, "value", e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                  <button type="button" onClick={() => removeHeaderRow(i)} style={btnSecondary}>×</button>
+                </div>
+              ))}
+              <button type="button" onClick={addHeaderRow} style={btnSecondary}>+ Заголовок</button>
+            </div>
+          )}
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            <input type="checkbox" checked={insecureSSL} onChange={(e) => setInsecureSSL(e.target.checked)} />
+            <span style={{ color: "var(--muted)" }}>Не проверять сертификат SSL</span>
+          </label>
+
+          <div style={{ paddingTop: 8, borderTop: "1px solid var(--border)" }}>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)", fontWeight: 600 }}>Скачивание</label>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <input
+                type="url"
+                placeholder="https://bucket.s3.region.amazonaws.com/path/to/object"
+                value={fileDownloadUrl}
+                onChange={(e) => setFileDownloadUrl(e.target.value)}
+                style={{ ...inputStyle, flex: 1, minWidth: 200 }}
+              />
+              <button
+                type="button"
+                onClick={doFileDownload}
+                disabled={!fileDownloadUrl.trim() || filesLoading}
+                style={btnPrimary}
+              >
+                {filesLoading ? "Скачивание…" : "Скачать"}
+              </button>
+            </div>
+          </div>
+
+          <div style={{ paddingTop: 8, borderTop: "1px solid var(--border)" }}>
+            <label style={{ display: "block", marginBottom: 6, color: "var(--muted)", fontWeight: 600 }}>Загрузка</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  type="url"
+                  placeholder="URL объекта или presigned PUT"
+                  value={fileUploadUrl}
+                  onChange={(e) => setFileUploadUrl(e.target.value)}
+                  style={{ ...inputStyle, flex: 1, minWidth: 200 }}
+                />
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  type="file"
+                  onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+                  style={{ color: "var(--text)" }}
+                />
+                <span style={{ color: "var(--muted)", fontSize: 13 }}>
+                  {selectedFile ? `${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)} KB)` : "Файл не выбран"}
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--muted)" }}>
+                  Размер части (MB, для multipart):
+                  <input
+                    type="number"
+                    min={5}
+                    max={100}
+                    value={fileChunkSizeMb}
+                    onChange={(e) => setFileChunkSizeMb(Math.max(5, Math.min(100, parseInt(e.target.value, 10) || 5)))}
+                    style={{ ...inputStyle, width: 72 }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={doFileUploadSimple}
+                  disabled={!fileUploadUrl.trim() || !selectedFile || filesLoading}
+                  style={btnSecondary}
+                  title="Один PUT-запрос с телом файла"
+                >
+                  Простая загрузка (PUT)
+                </button>
+                <button
+                  type="button"
+                  onClick={doFileUploadMultipart}
+                  disabled={!fileUploadUrl.trim() || !selectedFile || filesLoading}
+                  style={btnSecondary}
+                  title="S3 Multipart: POST ?uploads → PUT части → POST complete"
+                >
+                  Multipart S3
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {error && (

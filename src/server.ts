@@ -23,9 +23,13 @@ async function handleExecute(req: Request): Promise<Response> {
     method: string;
     headers?: Record<string, string>;
     body?: string;
+    bodyBase64?: string;
     insecure?: boolean;
     soapAction?: string;
     soapBody?: string;
+    graphqlQuery?: string;
+    graphqlVariables?: string;
+    graphqlOperationName?: string;
     keycloak?: {
       serverUrl: string;
       realm: string;
@@ -41,7 +45,7 @@ async function handleExecute(req: Request): Promise<Response> {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
-  const { url: rawUrl, method, headers = {}, body: reqBody, insecure, soapAction, soapBody, keycloak } = body;
+  const { url: rawUrl, method, headers = {}, body: reqBody, bodyBase64, insecure, soapAction, soapBody, graphqlQuery, graphqlVariables, graphqlOperationName, keycloak } = body;
   if (!rawUrl || !method) {
     return json({ error: "url and method are required" }, 400);
   }
@@ -70,21 +74,33 @@ async function handleExecute(req: Request): Promise<Response> {
     }
   }
 
+  let requestBody: string | Uint8Array | undefined;
+  if (bodyBase64 && ["POST", "PUT", "PATCH"].includes(method.toUpperCase())) {
+    try {
+      requestBody = Buffer.from(bodyBase64, "base64");
+    } catch {
+      return json({ error: "Invalid bodyBase64" }, 400);
+    }
+  } else if (reqBody && ["POST", "PUT", "PATCH"].includes(method.toUpperCase())) {
+    requestBody = reqBody;
+  }
+
   try {
     const res = await fetch(url, {
       method: method.toUpperCase(),
       headers: Object.keys(headersRecord).length ? headersRecord : undefined,
-      body:
-        reqBody && ["POST", "PUT", "PATCH"].includes(method.toUpperCase())
-          ? reqBody
-          : undefined,
+      body: requestBody,
       ...(insecure ? { tls: { rejectUnauthorized: false } } : {}),
     });
 
     const contentType = res.headers.get("content-type") ?? "";
+    const isBinary = /^application\/(octet-stream|pdf|zip|x-)/.test(contentType) || (!contentType.includes("json") && !contentType.includes("text") && !contentType.includes("xml"));
     let responseBody: string;
-    if (contentType.includes("application/json")) {
-      responseBody = await res.text();
+    let responseBodyBase64: string | undefined;
+    if (isBinary) {
+      const buf = await res.arrayBuffer();
+      responseBodyBase64 = Buffer.from(buf).toString("base64");
+      responseBody = "";
     } else {
       responseBody = await res.text();
     }
@@ -96,6 +112,9 @@ async function handleExecute(req: Request): Promise<Response> {
       headers: authMode === "headers" ? headers : undefined,
       soapAction: soapAction?.trim() || undefined,
       soapBody: soapBody?.trim() || undefined,
+      graphqlQuery: graphqlQuery?.trim() || undefined,
+      graphqlVariables: graphqlVariables?.trim() || undefined,
+      graphqlOperationName: graphqlOperationName?.trim() || undefined,
     });
 
     return json({
@@ -103,6 +122,7 @@ async function handleExecute(req: Request): Promise<Response> {
       statusText: res.statusText,
       headers: Object.fromEntries(res.headers.entries()),
       body: responseBody,
+      ...(responseBodyBase64 != null && { bodyBase64: responseBodyBase64 }),
       contentType,
     });
   } catch (err) {
@@ -118,7 +138,7 @@ async function handleExecute(req: Request): Promise<Response> {
 async function handleHistory(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   if (req.method === "POST") {
-    let body: { url?: string; method?: string; authMode?: AuthMode; keycloak?: unknown; headers?: Record<string, string>; soapAction?: string; soapBody?: string };
+    let body: { url?: string; method?: string; authMode?: AuthMode; keycloak?: unknown; headers?: Record<string, string>; soapAction?: string; soapBody?: string; graphqlQuery?: string; graphqlVariables?: string; graphqlOperationName?: string };
     try {
       body = await req.json();
     } catch {
@@ -134,6 +154,9 @@ async function handleHistory(req: Request): Promise<Response> {
       headers: authMode === "headers" && body.headers && typeof body.headers === "object" ? body.headers : undefined,
       soapAction: body.soapAction?.trim() || undefined,
       soapBody: body.soapBody?.trim() || undefined,
+      graphqlQuery: body.graphqlQuery?.trim() || undefined,
+      graphqlVariables: body.graphqlVariables?.trim() || undefined,
+      graphqlOperationName: body.graphqlOperationName?.trim() || undefined,
     });
     return json({ items: list });
   }

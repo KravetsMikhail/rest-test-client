@@ -20,6 +20,9 @@ export interface HistoryEntry {
   headers?: Record<string, string>;
   soapAction?: string;
   soapBody?: string;
+  graphqlQuery?: string;
+  graphqlVariables?: string;
+  graphqlOperationName?: string;
 }
 
 const historyFile = "./data/history.json";
@@ -33,6 +36,9 @@ function normalize(entry: Partial<HistoryEntry>): HistoryEntry {
   const headers = entry.headers && authMode === "headers" && Object.keys(entry.headers).length > 0 ? entry.headers : undefined;
   const soapAction = (entry.soapAction ?? "").trim() || undefined;
   const soapBody = (entry.soapBody ?? "").trim() || undefined;
+  const graphqlQuery = (entry.graphqlQuery ?? "").trim() || undefined;
+  const graphqlVariables = (entry.graphqlVariables ?? "").trim() || undefined;
+  const graphqlOperationName = (entry.graphqlOperationName ?? "").trim() || undefined;
   return {
     url,
     method,
@@ -41,6 +47,9 @@ function normalize(entry: Partial<HistoryEntry>): HistoryEntry {
     ...(headers && { headers }),
     ...(soapAction && { soapAction }),
     ...(soapBody && { soapBody }),
+    ...(graphqlQuery && { graphqlQuery }),
+    ...(graphqlVariables && { graphqlVariables }),
+    ...(graphqlOperationName && { graphqlOperationName }),
   };
 }
 
@@ -74,6 +83,9 @@ function decryptEntry(o: Record<string, unknown>): Partial<HistoryEntry> {
     headers,
     soapAction: o.soapAction != null ? String(o.soapAction) : undefined,
     soapBody: o.soapBody != null ? String(o.soapBody) : undefined,
+    graphqlQuery: o.graphqlQuery != null ? String(o.graphqlQuery) : undefined,
+    graphqlVariables: o.graphqlVariables != null ? String(o.graphqlVariables) : undefined,
+    graphqlOperationName: o.graphqlOperationName != null ? String(o.graphqlOperationName) : undefined,
   };
 }
 
@@ -104,6 +116,9 @@ function encryptForSave(entry: HistoryEntry): Record<string, unknown> {
     ...(entry.authMode && entry.authMode !== "none" && { authMode: entry.authMode }),
     ...(entry.soapAction && { soapAction: entry.soapAction }),
     ...(entry.soapBody && { soapBody: entry.soapBody }),
+    ...(entry.graphqlQuery && { graphqlQuery: entry.graphqlQuery }),
+    ...(entry.graphqlVariables && { graphqlVariables: entry.graphqlVariables }),
+    ...(entry.graphqlOperationName && { graphqlOperationName: entry.graphqlOperationName }),
   };
   if (entry.keycloak) {
     out.keycloak = {
@@ -145,6 +160,9 @@ export interface AddHistoryAuth {
   headers?: Record<string, string>;
   soapAction?: string;
   soapBody?: string;
+  graphqlQuery?: string;
+  graphqlVariables?: string;
+  graphqlOperationName?: string;
 }
 
 export async function addToHistory(url: string, method = "GET", auth?: AddHistoryAuth): Promise<HistoryEntry[]> {
@@ -157,10 +175,16 @@ export async function addToHistory(url: string, method = "GET", auth?: AddHistor
     headers: auth?.headers,
     soapAction: auth?.soapAction,
     soapBody: auth?.soapBody,
+    graphqlQuery: auth?.graphqlQuery,
+    graphqlVariables: auth?.graphqlVariables,
+    graphqlOperationName: auth?.graphqlOperationName,
   });
   if (!entry.url) return items;
-  const key = (e: HistoryEntry) =>
-    e.soapAction != null || e.soapBody != null ? `SOAP ${e.url} ${e.soapAction ?? ""}` : `${e.method} ${e.url}`;
+  const key = (e: HistoryEntry) => {
+    if (e.graphqlQuery != null) return `GraphQL ${e.url}`;
+    if (e.soapAction != null || e.soapBody != null) return `SOAP ${e.url} ${e.soapAction ?? ""}`;
+    return `${e.method} ${e.url}`;
+  };
   items = [entry, ...items.filter((e) => key(e) !== key(entry))].slice(
     0,
     config.historySize
