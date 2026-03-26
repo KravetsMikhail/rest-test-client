@@ -1,10 +1,14 @@
 # REST Test Client
 
+[English version](README_EN.md)
+
 [![Bun](https://img.shields.io/badge/runtime-Bun-000000?logo=bun)](https://bun.sh/)
 [![React](https://img.shields.io/badge/frontend-React%2018-61DAFB?logo=react)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/build-Vite%205-646CFF?logo=vite)](https://vitejs.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript)](https://www.typescriptlang.org/)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)](https://www.docker.com/)
+
+![REST Test Client UI](docs/rest_test_client_01.png)
 
 Универсальный веб-клиент для тестирования API: REST, SOAP, GraphQL и работа с файлами (S3-совместимое API). Единая история запросов, аутентификация через Keycloak или ручные заголовки, отображение ответов (JSON, таблица, XML), опциональное шифрование чувствительных данных в истории.
 
