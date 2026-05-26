@@ -86,10 +86,33 @@ async function handleExecute(req: Request): Promise<Response> {
   }
 
   try {
+    // const res = await fetch(url, {
+    //   method: method.toUpperCase(),
+    //   headers: Object.keys(headersRecord).length ? headersRecord : undefined,
+    //   body: requestBody,
+    //   ...(insecure ? { tls: { rejectUnauthorized: false } } : {}),
+    // });
+
+    let bodyData = undefined;
+    if (requestBody != null) {
+      if (typeof requestBody === 'string') {
+        bodyData = requestBody;
+      } else if (requestBody instanceof FormData) {
+        bodyData = requestBody; // FormData не требует Content-Type
+      } else {
+        bodyData = JSON.stringify(requestBody);
+      }
+    }
+
     const res = await fetch(url, {
       method: method.toUpperCase(),
-      headers: Object.keys(headersRecord).length ? headersRecord : undefined,
-      body: requestBody,
+      headers: {
+        ...(bodyData && !(bodyData instanceof FormData) && {
+          'Content-Type': 'application/json'
+        }),
+        ...headersRecord
+      },
+      body: bodyData,
       ...(insecure ? { tls: { rejectUnauthorized: false } } : {}),
     });
 
@@ -172,10 +195,10 @@ async function serveStatic(pathname: string): Promise<Response | null> {
   if (await file.exists()) {
     const contentType =
       path.endsWith(".html") ? "text/html"
-      : path.endsWith(".js") ? "application/javascript"
-      : path.endsWith(".css") ? "text/css"
-      : path.endsWith(".ico") ? "image/x-icon"
-      : "application/octet-stream";
+        : path.endsWith(".js") ? "application/javascript"
+          : path.endsWith(".css") ? "text/css"
+            : path.endsWith(".ico") ? "image/x-icon"
+              : "application/octet-stream";
     return new Response(file, { headers: { "Content-Type": contentType } });
   }
   if (pathname !== "/" && !pathname.includes(".")) {
